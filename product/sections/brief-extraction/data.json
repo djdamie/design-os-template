@@ -1,0 +1,179 @@
+{
+  "_meta": {
+    "models": {
+      "messages": "Chat messages in the brief extraction conversation. Can be from the user, AI assistant, or system.",
+      "suggestionChips": "Clickable prompts that help users ask about missing information in the brief.",
+      "fieldUpdates": "Tracks which brief fields were updated by each AI response."
+    },
+    "relationships": [
+      "Each AI message may contain fieldUpdates showing which canvas fields changed",
+      "Suggestion chips are generated based on missing critical and important fields",
+      "Messages belong to a conversation thread for a specific project"
+    ]
+  },
+  "projectContext": {
+    "caseId": "BMW-Electric-Future",
+    "caseTitle": "BMW iX Electric Future Global Campaign",
+    "completeness": 85
+  },
+  "messages": [
+    {
+      "id": "msg-001",
+      "role": "user",
+      "content": "Hi Team,\n\nHope you're well! We need your help on a big one.\n\nBMW is launching their new iX electric SUV globally and wants a major music moment. This is a premium, emotional campaign about the future of mobility.\n\nCampaign: \"Electric Future\"\nClient: BMW AG\nAgency: Serviceplan\n\nWHAT WE NEED:\n- Hero 60\" film for TV/Cinema premiere\n- 30\" cutdowns for TV\n- 15\" and 6\" social edits\n- Multiple language adaptations (DE, EN, FR, ES, IT, CN, JP)\n\nUSAGE:\n- Global (all territories)\n- All media: TV, Cinema, Online, Social, OOH digital, Dealership POS\n- 2 year license\n- Category exclusivity (automotive)\n\nBUDGET:\nWe have approved budget of €175,000 for the music license.\nOpen to sync of existing track OR bespoke composition.\n\nCREATIVE DIRECTION:\nWe want something that feels:\n- Premium and sophisticated\n- Forward-looking, optimistic about technology\n- Emotional but not cheesy\n- Modern electronic elements welcome but needs to feel timeless\n\nReferences:\n- The Blaze \"Territory\" - love the cinematic build\n- Jon Hopkins \"Open Eye Signal\" - the rolling energy\n- Ólafur Arnalds - the emotional electronics\n- NOT: Imagine Dragons-style epic rock\n\nThe spot follows a father and daughter on a journey through changing landscapes, from city to mountains to ocean. The music needs to carry the emotional weight without dialogue for the first 45 seconds.\n\nTIMELINE:\n- Kick-off: Monday Dec 16\n- First presentation needed: December 20 (before holiday)\n- Client presentation: January 6\n- Final approval needed: January 15\n- Air date: January 25 (Super Bowl adjacent)\n\nThis is super tight and high priority. Can you confirm availability?\n\nBest,\nSarah\n\nSarah Johnson\nSenior Producer\nServiceplan Group",
+      "timestamp": "2024-12-16T09:15:00Z"
+    },
+    {
+      "id": "msg-002",
+      "role": "assistant",
+      "content": "I've analyzed the brief from Serviceplan. This is a **Type A** project with a substantial budget. Here's what I extracted:\n\n## WHAT — Project Overview\n| Field | Value |\n|-------|-------|\n| Client | BMW AG |\n| Agency | Serviceplan Group |\n| Campaign | \"Electric Future\" - BMW iX Launch |\n| Budget | €175,000 |\n| Project Type | **A** (Full workflow) |\n| Territory | Global (all territories) |\n| Media | TV, Cinema, Online, Social, OOH digital, Dealership POS |\n| Term | 2 years |\n| Exclusivity | Yes — automotive category |\n\n## WITH WHAT — Deliverables\n- 60s hero film (TV/Cinema)\n- 30s cutdowns (TV)\n- 15s and 6s social edits\n- Language adaptations: DE, EN, FR, ES, IT, CN, JP\n\n## Creative Direction\n**Mood:** Premium, sophisticated, forward-looking, optimistic, emotional, timeless\n**Genre:** Cinematic electronic, ambient\n**References:** The Blaze \"Territory\", Jon Hopkins \"Open Eye Signal\", Ólafur Arnalds\n**Must Avoid:** Imagine Dragons-style epic rock, cheesy\n\n## WHEN — Timeline\n| Milestone | Date |\n|-----------|------|\n| Kick-off | Dec 16 |\n| First Presentation | Dec 20 |\n| Client Presentation | Jan 6 |\n| Final Approval | Jan 15 |\n| Air Date | Jan 25 |\n\n**Urgency:** 🔴 Rush — Super Bowl adjacent timing\n\n## WHO — Contact\n- **Brief Sender:** Sarah Johnson (Senior Producer)\n- **Email:** sarah.johnson@serviceplan.com\n\n---\n\n**Brief completeness: 85%**\n\nI'm missing a few details that would help with the search:",
+      "timestamp": "2024-12-16T09:15:12Z",
+      "fieldUpdates": [
+        "client_name",
+        "agency_name",
+        "budget",
+        "territory",
+        "media_types",
+        "term_length",
+        "exclusivity",
+        "video_lengths",
+        "mood_keywords",
+        "genre_preferences",
+        "reference_tracks",
+        "must_avoid",
+        "deadline_date",
+        "air_date",
+        "brief_sender_name",
+        "brief_sender_email",
+        "creative_direction",
+        "campaign_context"
+      ],
+      "isProcessing": false
+    },
+    {
+      "id": "msg-003",
+      "role": "user",
+      "content": "What's still missing?",
+      "timestamp": "2024-12-16T09:16:30Z"
+    },
+    {
+      "id": "msg-004",
+      "role": "assistant",
+      "content": "Here's what would complete the brief:\n\n**Critical (blocking search):**\n- ✅ All critical fields captured\n\n**Important (helpful for search):**\n- ⚠️ **Sync points** — Are there specific moments in the 60s film where music needs to hit? (e.g., \"logo reveal at 0:52\")\n- ⚠️ **Stems requirements** — Will they need separated stems for the different language versions?\n- ⚠️ **Vocals preference** — Instrumental only, or open to vocals?\n\n**Nice to have:**\n- Target audience demographics\n- Previous BMW music usage for reference\n- Post-production schedule\n\nThe brief sender mentioned \"music needs to carry the emotional weight without dialogue for the first 45 seconds\" — this suggests sync points are important. Should I draft a question to Sarah about the specific sync requirements?",
+      "timestamp": "2024-12-16T09:16:42Z",
+      "fieldUpdates": [],
+      "isProcessing": false
+    },
+    {
+      "id": "msg-005",
+      "role": "user",
+      "content": "Yes, can you draft that email?",
+      "timestamp": "2024-12-16T09:17:15Z"
+    },
+    {
+      "id": "msg-006",
+      "role": "assistant",
+      "content": "Here's a draft follow-up email to Sarah:\n\n---\n\n**Subject:** RE: BMW iX - \"Electric Future\" Global Campaign - Quick clarifications\n\nHi Sarah,\n\nThanks for the detailed brief — excited to work on this one!\n\nA few quick questions to help us find the perfect track:\n\n1. **Sync points:** You mentioned the music carries the emotional weight for the first 45 seconds. Are there specific hit points in the edit? (e.g., scene transitions, logo reveal, emotional peaks)\n\n2. **Stems:** Will you need separated stems for the language adaptations, or just the full mix?\n\n3. **Vocals:** Are you open to tracks with vocals, or should we focus on instrumental options?\n\nHappy to jump on a quick call if easier.\n\nBest,\n[Your name]\n\n---\n\nWant me to copy this to your clipboard?",
+      "timestamp": "2024-12-16T09:17:28Z",
+      "fieldUpdates": [],
+      "isProcessing": false
+    },
+    {
+      "id": "msg-007",
+      "role": "user",
+      "content": "Sarah just replied - they need stems for all versions, instrumental only, and the key moments are: opening shot at 0:00, emotional peak at 0:28, and logo resolve at 0:52",
+      "timestamp": "2024-12-16T09:45:00Z"
+    },
+    {
+      "id": "msg-008",
+      "role": "assistant",
+      "content": "Perfect, I've updated the brief with Sarah's clarifications:\n\n## Updated Fields\n\n**Technical Requirements:**\n- ✅ **Stems:** Required for all language versions\n- ✅ **Vocals:** Instrumental only\n\n**Sync Points:**\n| Timecode | Moment |\n|----------|--------|\n| 0:00 | Opening shot |\n| 0:28 | Emotional peak |\n| 0:52 | Logo resolve |\n\n---\n\n**Brief completeness: 92%** ↑\n\nThe brief is now ready for music search. The only remaining nice-to-haves are target audience demographics and previous BMW music references, but these aren't critical.\n\nShould I classify the project and calculate the margin breakdown?",
+      "timestamp": "2024-12-16T09:45:15Z",
+      "fieldUpdates": [
+        "stems_required",
+        "vocals_preference",
+        "sync_points"
+      ],
+      "isProcessing": false
+    }
+  ],
+  "suggestionChips": [
+    {
+      "id": "chip-001",
+      "label": "What are the sync points?",
+      "field": "sync_points",
+      "priority": "important"
+    },
+    {
+      "id": "chip-002",
+      "label": "Do they need stems?",
+      "field": "stems_required",
+      "priority": "important"
+    },
+    {
+      "id": "chip-003",
+      "label": "Instrumental or vocals?",
+      "field": "vocals_preference",
+      "priority": "important"
+    },
+    {
+      "id": "chip-004",
+      "label": "Who is the target audience?",
+      "field": "target_audience",
+      "priority": "helpful"
+    },
+    {
+      "id": "chip-005",
+      "label": "What music has BMW used before?",
+      "field": "previous_music",
+      "priority": "helpful"
+    }
+  ],
+  "extractedBrief": {
+    "completeness": 92,
+    "projectType": "A",
+    "business": {
+      "client_name": "BMW AG",
+      "agency_name": "Serviceplan Group",
+      "budget": 175000,
+      "territory": ["Global"],
+      "media_types": ["TV", "Cinema", "Online", "Social", "OOH digital", "Dealership POS"],
+      "term_length": "2 years",
+      "exclusivity": true,
+      "exclusivity_details": "Automotive category"
+    },
+    "creative": {
+      "creative_direction": "Premium emotional campaign for BMW iX electric SUV global launch. Father-daughter journey through landscapes. Music carries emotional weight, no dialogue for first 45s.",
+      "mood_keywords": ["Premium", "sophisticated", "forward-looking", "optimistic", "emotional", "timeless", "modern electronic"],
+      "genre_preferences": ["Cinematic electronic", "ambient"],
+      "reference_tracks": [
+        { "artist": "The Blaze", "title": "Territory", "notes": "Love the cinematic build" },
+        { "artist": "Jon Hopkins", "title": "Open Eye Signal", "notes": "The rolling energy" },
+        { "artist": "Ólafur Arnalds", "title": null, "notes": "The emotional electronics" }
+      ],
+      "must_avoid": "Imagine Dragons-style epic rock, cheesy",
+      "vocals_preference": "instrumental"
+    },
+    "technical": {
+      "video_lengths": ["60s", "30s", "15s", "6s"],
+      "stems_required": true,
+      "sync_points": "Opening shot at 0:00, emotional peak at 0:28, logo resolve at 0:52"
+    },
+    "timeline": {
+      "deadline_date": "2024-01-15",
+      "air_date": "2024-01-25",
+      "deadline_urgency": "rush",
+      "first_presentation_date": "2024-12-20"
+    },
+    "who": {
+      "brief_sender_name": "Sarah Johnson",
+      "brief_sender_email": "sarah.johnson@serviceplan.com",
+      "brief_sender_role": "Senior Producer"
+    },
+    "analysis": {
+      "missing_critical": [],
+      "missing_important": [],
+      "missing_helpful": ["target_audience", "previous_music"]
+    }
+  }
+}

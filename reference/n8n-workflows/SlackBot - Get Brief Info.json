@@ -1,0 +1,484 @@
+{
+  "name": "SlackBot - Get Brief Info",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-bot-get-brief",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook: Get Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        112,
+        304
+      ],
+      "webhookId": "slack-get-brief-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse Slack app_mention event\nconst body = $json.body || $json;\n\n// Handle Slack URL verification challenge\nif (body.type === 'url_verification') {\n  return {\n    json: {\n      challenge: body.challenge,\n      isChallenge: true,\n      skipProcessing: true\n    }\n  };\n}\n\nconst event = body.event || {};\nconst messageText = event.text || '';\nconst channelId = event.channel || '';\nconst userId = event.user || '';\nconst threadTs = event.thread_ts || event.ts || '';\n\n// Remove bot mention\nconst botMention = /<@[A-Z0-9]+>/g;\nconst cleanMessage = messageText.replace(botMention, '').trim();\n\nreturn {\n  json: {\n    messageText: cleanMessage,\n    originalText: messageText,\n    channelId: channelId,\n    userId: userId,\n    threadTs: threadTs,\n    isChallenge: false,\n    skipProcessing: false,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "parse-event",
+      "name": "Parse Slack Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skipProcessing }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "should-skip",
+      "name": "Should Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        512,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ challenge: $('Parse Slack Event').item.json.challenge }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-challenge",
+      "name": "Respond Challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        704,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "channel",
+        "operation": "get",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Webhook: Get Brief').item.json.body.channel_id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "get-channel-info",
+      "name": "Get Channel Info",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        704,
+        400
+      ],
+      "webhookId": "c014ccc7-9f61-461a-97da-7b8da3837bea",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const slackEventData = $('Parse Slack Event').item.json;\nconst channelInfo = $json;\n\nconst channelName = channelInfo.name || '';\nlet catchyCaseId = null;\n\nif (channelName) {\n  const match = channelName.match(/^tf-(\\d+)/);\n  if (match) {\n    const caseNumber = match[1];\n    catchyCaseId = 'TF-' + caseNumber.padStart(5, '0');\n  }\n}\n\nreturn {\n  json: {\n    ...slackEventData,\n    channelName: channelName,\n    catchyCaseId: catchyCaseId,\n    hasValidCase: catchyCaseId !== null\n  }\n};"
+      },
+      "id": "extract-case-id",
+      "name": "Extract Case ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-case-id",
+              "leftValue": "={{ $json.hasValidCase }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-valid-case",
+      "name": "Has Valid Case?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1104,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const channelName = $json.channelName || 'this channel';\n\nreturn {\n  json: {\n    channel: $json.channelId,\n    thread_ts: $json.threadTs,\n    text: `⚠️ I can only retrieve briefs from case-specific channels (format: tf-00123-client-keywords).\\n\\nThis channel (${channelName}) doesn't appear to be a case channel.`,\n    isError: true\n  }\n};"
+      },
+      "id": "build-error-no-case",
+      "name": "Build Error: No Case",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-error",
+      "name": "Post Error to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1504,
+        560
+      ],
+      "webhookId": "6c714561-19e3-4b17-8bfe-d63ce2021112",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond to Webhook (Error)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1712,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Get brief data with update history\nWITH brief_data AS (\n  SELECT \n    c.id as case_id,\n    c.case_number,\n    c.catchy_case_id,\n    c.case_title,\n    c.created_at as case_created_at,\n    b.id as brief_id,\n    b.session_id,\n    b.analysis,\n    b.client,\n    b.brand,\n    b.budget_raw,\n    b.submission_deadline,\n    b.ppm_date,\n    b.shoot_date,\n    b.air_date,\n    b.keywords,\n    b.territory,\n    b.media,\n    b.version,\n    b.created_at as brief_created_at,\n    b.updated_at as brief_updated_at\n  FROM tf_cases c\n  LEFT JOIN tf_briefs b ON b.case_id = c.id\n  WHERE UPPER(c.catchy_case_id) LIKE UPPER($1) || '%'\n  LIMIT 1\n),\nrecent_updates AS (\n  SELECT \n    activity_type,\n    activity_description,\n    created_at,\n    changes,\n    source\n  FROM tf_case_activity\n  WHERE case_id = (SELECT case_id FROM brief_data)\n    AND activity_type IN ('brief_updated', 'brief_created')\n  ORDER BY created_at DESC\n  LIMIT 10\n)\nSELECT \n  bd.*,\n  COALESCE(\n    json_agg(\n      json_build_object(\n        'type', ru.activity_type,\n        'description', ru.activity_description,\n        'timestamp', ru.created_at,\n        'changes', ru.changes,\n        'source', ru.source\n      ) ORDER BY ru.created_at DESC\n    ) FILTER (WHERE ru.activity_type IS NOT NULL),\n    '[]'::json\n  ) as update_history\nFROM brief_data bd\nLEFT JOIN recent_updates ru ON true\nGROUP BY bd.case_id, bd.case_number, bd.catchy_case_id, bd.case_title, \n         bd.case_created_at, bd.brief_id, bd.session_id, bd.analysis,\n         bd.client, bd.brand, bd.budget_raw, bd.submission_deadline,\n         bd.ppm_date, bd.shoot_date, bd.air_date, bd.keywords,\n         bd.territory, bd.media, bd.version, bd.brief_created_at, bd.brief_updated_at;",
+        "options": {
+          "queryReplacement": "={{ [$json.catchyCaseId] }}"
+        }
+      },
+      "id": "get-brief-data",
+      "name": "Get Brief Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1312,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const briefData = $json;\nconst slackData = $('Extract Case ID').item.json;\n\n// Check if brief exists\nif (!briefData.brief_id) {\n  return {\n    json: {\n      channel: slackData.channelId,\n      thread_ts: slackData.threadTs || '',\n      text: `📋 **No Brief Found**\\n\\nCase ${briefData.catchy_case_id || 'this case'} exists but doesn't have a brief yet.`\n    }\n  };\n}\n\n// Helper functions\nfunction formatDate(dateStr) {\n  if (!dateStr) return '_not set_';\n  const date = new Date(dateStr);\n  return date.toLocaleDateString('en-GB', { \n    year: 'numeric', \n    month: 'short', \n    day: 'numeric' \n  });\n}\n\nfunction formatDateTime(dateStr) {\n  if (!dateStr) return '_not set_';\n  const date = new Date(dateStr);\n  return date.toLocaleDateString('en-GB', { \n    year: 'numeric', \n    month: 'short', \n    day: 'numeric',\n    hour: '2-digit',\n    minute: '2-digit'\n  });\n}\n\nfunction formatArray(arr) {\n  if (!arr || arr.length === 0) return '_not set_';\n  return arr.join(', ');\n}\n\nfunction formatBudget(budget) {\n  if (!budget) return '_not set_';\n  const num = parseFloat(budget);\n  if (!isNaN(num)) {\n    return `$${num.toLocaleString()}`;\n  }\n  return budget;\n}\n\n// Extract brief description from analysis\nconst analysis = briefData.analysis || {};\nconst businessBrief = analysis.business_brief || {};\nconst creativeBrief = analysis.creative_brief || {};\nconst extractionNotes = analysis.extraction_notes || '';\n\n// Build description/recap section\nlet briefDescription = businessBrief.brief_description || creativeBrief.brief_overview || '';\nif (!briefDescription && creativeBrief.mood) {\n  briefDescription = creativeBrief.mood;\n}\n\n// Parse update history\nconst updateHistory = briefData.update_history || [];\nlet parsedHistory = [];\ntry {\n  parsedHistory = typeof updateHistory === 'string' ? JSON.parse(updateHistory) : updateHistory;\n} catch (e) {\n  parsedHistory = [];\n}\n\n// Build formatted text message\nlet message = `📋 **Brief: ${briefData.catchy_case_id}**\\n\\n`;\nmessage += `**${briefData.case_title || 'Untitled Case'}**\\n\\n`;\n\n// Basic Info\nmessage += `**Client:** ${briefData.client || '_not set_'}\\n`;\nmessage += `**Brand:** ${briefData.brand || '_not set_'}\\n`;\nmessage += `**Budget:** ${formatBudget(briefData.budget_raw)}\\n`;\nmessage += `**Version:** v${briefData.version || 1}\\n\\n`;\n\n// What This Brief Is Asking For\nif (briefDescription) {\n  message += `📝 **What This Brief Is Asking For:**\\n${briefDescription}\\n\\n`;\n}\n\n// Creative Details\nmessage += `**Territory:** ${formatArray(briefData.territory)}\\n`;\nmessage += `**Media:** ${formatArray(briefData.media)}\\n`;\nmessage += `**Keywords:** ${formatArray(briefData.keywords)}\\n\\n`;\n\n// Deadlines\nmessage += `**Deadlines:**\\n`;\nmessage += `• Submission: ${formatDate(briefData.submission_deadline)}\\n`;\nmessage += `• PPM: ${formatDate(briefData.ppm_date)}\\n`;\nmessage += `• Shoot: ${formatDate(briefData.shoot_date)}\\n`;\nmessage += `• Air: ${formatDate(briefData.air_date)}\\n\\n`;\n\n// Recent Updates\nif (parsedHistory.length > 0) {\n  const recentUpdates = parsedHistory.slice(0, 5);\n  message += `🔄 **Recent Updates:**\\n`;\n  \n  recentUpdates.forEach((update) => {\n    const emoji = update.source === 'slack' ? '💬' : '🔧';\n    const timeAgo = formatDateTime(update.timestamp);\n    let description = update.description || 'Update made';\n    \n    if (update.changes && update.changes.ai_summary) {\n      description = update.changes.ai_summary;\n    }\n    \n    message += `${emoji} _${timeAgo}_: ${description}\\n`;\n  });\n  message += `\\n`;\n}\n\n// Notes\nif (extractionNotes && extractionNotes.trim().length > 0) {\n  const notesPreview = extractionNotes.length > 300 \n    ? extractionNotes.substring(0, 300) + '...' \n    : extractionNotes;\n  message += `📌 **Notes:**\\n${notesPreview}\\n\\n`;\n}\n\n// Footer\nmessage += `_Last updated: ${formatDate(briefData.brief_updated_at)} | Created: ${formatDate(briefData.brief_created_at)}_`;\n\nreturn {\n  json: {\n    channel: slackData.channelId,\n    thread_ts: slackData.threadTs || '',\n    text: message\n  }\n};"
+      },
+      "id": "format-brief-message",
+      "name": "Format Brief Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Get Channel Info').item.json.id }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-brief-to-slack",
+      "name": "Post Brief to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1712,
+        304
+      ],
+      "webhookId": "e4fc3bf3-31e9-4ea8-99dd-a671fe6464c0",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond to Webhook (Success)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1904,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Get Brief": {
+      "main": [
+        [
+          {
+            "node": "Parse Slack Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Slack Event": {
+      "main": [
+        [
+          {
+            "node": "Should Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Skip?": {
+      "main": [
+        [
+          {
+            "node": "Respond Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Channel Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Channel Info": {
+      "main": [
+        [
+          {
+            "node": "Extract Case ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Case ID": {
+      "main": [
+        [
+          {
+            "node": "Has Valid Case?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Case?": {
+      "main": [
+        [
+          {
+            "node": "Get Brief Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Error: No Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Error: No Case": {
+      "main": [
+        [
+          {
+            "node": "Post Error to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Error to Slack": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Brief Data": {
+      "main": [
+        [
+          {
+            "node": "Format Brief Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Brief Message": {
+      "main": [
+        [
+          {
+            "node": "Post Brief to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Brief to Slack": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "fcce9751-d68e-406e-8bc9-b9c6b296e2f6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "27d74fdf4a6138506ab2af8024f163764cffd6e3f1afe42b0b372c347eb2fa68"
+  },
+  "id": "9SfAEtstGa2JZr7L",
+  "tags": []
+}

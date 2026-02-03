@@ -1,0 +1,719 @@
+{
+  "_meta": {
+    "models": {
+      "project": "The top-level project container with case ID, title, classification, and status information.",
+      "brief": "All structured data extracted from the client's brief, organized into sections (business, creative, technical, timeline, etc.).",
+      "canvasField": "An individual editable field with its current value, status (empty, ai-filled, user-edited), and priority level.",
+      "teamAssignment": "Assigns a team member to a specific role on the project (Account Manager, Music Supervisor, etc.).",
+      "marginCalculation": "Auto-calculated budget breakdown showing payout amount, margin percentage, and pricing tier.",
+      "integrationStatus": "Tracks whether external services (Slack, Nextcloud) have been connected for this project."
+    },
+    "relationships": [
+      "Each Project has one Brief containing all extracted data",
+      "Brief fields are displayed as CanvasFields with status indicators",
+      "Project has multiple TeamAssignments (one per role)",
+      "MarginCalculation is derived from the project budget and type",
+      "IntegrationStatus tracks external service connections for the project"
+    ]
+  },
+  "project": {
+    "id": "proj-001",
+    "caseNumber": 2024001,
+    "caseId": "BMW-Electric-Future",
+    "caseTitle": "BMW iX Electric Future Global Campaign",
+    "projectType": "A",
+    "projectTypeOverride": null,
+    "status": "active",
+    "completeness": 92,
+    "hasUnsavedChanges": false,
+    "createdAt": "2024-12-16T09:15:00Z",
+    "updatedAt": "2024-12-16T09:45:15Z"
+  },
+  "marginCalculation": {
+    "budget": 175000,
+    "budgetCurrency": "EUR",
+    "marginPercentage": 22,
+    "payoutAmount": 136500,
+    "marginAmount": 38500,
+    "tier": "A",
+    "tierDescription": "Full workflow with management oversight"
+  },
+  "completenessBreakdown": {
+    "score": 92,
+    "criticalComplete": 5,
+    "criticalTotal": 5,
+    "importantComplete": 5,
+    "importantTotal": 6,
+    "helpfulComplete": 4,
+    "helpfulTotal": 10,
+    "missingFields": [
+      { "field": "target_audience", "priority": "helpful", "tab": "OTHER" },
+      { "field": "previous_music", "priority": "helpful", "tab": "OTHER" },
+      { "field": "brand_values", "priority": "helpful", "tab": "OTHER" },
+      { "field": "competitor_info", "priority": "helpful", "tab": "OTHER" },
+      { "field": "lyrics_requirements", "priority": "helpful", "tab": "WITH_WHAT" },
+      { "field": "deliverable_formats", "priority": "important", "tab": "WITH_WHAT" }
+    ]
+  },
+  "tabs": [
+    {
+      "id": "WHAT",
+      "label": "WHAT",
+      "description": "Project overview, client info, rights & budget",
+      "missingCritical": 0,
+      "missingImportant": 0
+    },
+    {
+      "id": "WHO",
+      "label": "WHO",
+      "description": "Team assignments and responsibilities",
+      "missingCritical": 0,
+      "missingImportant": 0
+    },
+    {
+      "id": "WITH_WHAT",
+      "label": "WITH WHAT",
+      "description": "Tools, sources, deliverables & technical specs",
+      "missingCritical": 0,
+      "missingImportant": 1
+    },
+    {
+      "id": "WHEN",
+      "label": "WHEN",
+      "description": "Timeline, deadlines & milestones",
+      "missingCritical": 0,
+      "missingImportant": 0
+    },
+    {
+      "id": "OTHER",
+      "label": "OTHER",
+      "description": "Notes, context & attachments",
+      "missingCritical": 0,
+      "missingImportant": 0
+    }
+  ],
+  "fields": {
+    "WHAT": {
+      "clientInfo": {
+        "label": "Client Information",
+        "fields": [
+          {
+            "id": "client_name",
+            "label": "Client Name",
+            "value": "BMW AG",
+            "type": "text",
+            "status": "ai-filled",
+            "priority": "critical",
+            "placeholder": "e.g., BMW, Nike, Apple"
+          },
+          {
+            "id": "agency_name",
+            "label": "Agency Name",
+            "value": "Serviceplan Group",
+            "type": "text",
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "e.g., Jung von Matt, Serviceplan"
+          },
+          {
+            "id": "brand_name",
+            "label": "Brand/Sub-brand",
+            "value": "BMW iX",
+            "type": "text",
+            "status": "user-edited",
+            "priority": "important",
+            "placeholder": "e.g., BMW i, Nike Air"
+          },
+          {
+            "id": "brief_sender_name",
+            "label": "Brief Sender",
+            "value": "Sarah Johnson",
+            "type": "text",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "Name of person who sent the brief"
+          },
+          {
+            "id": "brief_sender_email",
+            "label": "Sender Email",
+            "value": "sarah.johnson@serviceplan.com",
+            "type": "email",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "email@agency.com"
+          },
+          {
+            "id": "brief_sender_role",
+            "label": "Sender Role",
+            "value": "Senior Producer",
+            "type": "text",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "e.g., Producer, Creative Director"
+          }
+        ]
+      },
+      "projectDetails": {
+        "label": "Project Details",
+        "fields": [
+          {
+            "id": "project_title",
+            "label": "Project Title",
+            "value": "Electric Future - BMW iX Launch",
+            "type": "text",
+            "status": "user-edited",
+            "priority": "critical",
+            "placeholder": "Descriptive project name"
+          },
+          {
+            "id": "video_lengths",
+            "label": "Video Lengths",
+            "value": ["60s", "30s", "15s", "6s"],
+            "type": "multi-select",
+            "options": ["6s", "10s", "15s", "20s", "30s", "45s", "60s", "90s", "custom"],
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "Select all needed lengths"
+          },
+          {
+            "id": "language_adaptations",
+            "label": "Language Adaptations",
+            "value": ["DE", "EN", "FR", "ES", "IT", "CN", "JP"],
+            "type": "multi-select",
+            "options": ["DE", "EN", "FR", "ES", "IT", "PT", "CN", "JP", "KR", "AR"],
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "Select languages"
+          }
+        ]
+      },
+      "rightsUsage": {
+        "label": "Rights & Usage",
+        "fields": [
+          {
+            "id": "territory",
+            "label": "Territory",
+            "value": ["Global"],
+            "type": "multi-select",
+            "options": ["Global", "DACH", "Europe", "North America", "APAC", "LATAM", "Germany", "UK", "USA", "France"],
+            "status": "ai-filled",
+            "priority": "critical",
+            "placeholder": "Select territories"
+          },
+          {
+            "id": "media_types",
+            "label": "Media Types",
+            "value": ["TV", "Cinema", "Online", "Social", "OOH digital", "Dealership POS"],
+            "type": "multi-select",
+            "options": ["TV", "Cinema", "Online", "Social", "OOH", "OOH digital", "Radio", "Podcast", "POS", "Dealership POS", "CTV/ATV"],
+            "status": "ai-filled",
+            "priority": "critical",
+            "placeholder": "Select media channels"
+          },
+          {
+            "id": "term_length",
+            "label": "Term Length",
+            "value": "2 years",
+            "type": "select",
+            "options": ["3 months", "6 months", "1 year", "2 years", "3 years", "perpetuity"],
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "Select license duration"
+          },
+          {
+            "id": "exclusivity",
+            "label": "Exclusivity",
+            "value": true,
+            "type": "boolean",
+            "status": "ai-filled",
+            "priority": "important"
+          },
+          {
+            "id": "exclusivity_details",
+            "label": "Exclusivity Details",
+            "value": "Automotive category",
+            "type": "text",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "Specify exclusivity scope",
+            "dependsOn": { "field": "exclusivity", "value": true }
+          }
+        ]
+      },
+      "budget": {
+        "label": "Budget",
+        "fields": [
+          {
+            "id": "budget_amount",
+            "label": "Budget Amount",
+            "value": 175000,
+            "type": "currency",
+            "status": "ai-filled",
+            "priority": "critical",
+            "placeholder": "Enter budget"
+          },
+          {
+            "id": "budget_currency",
+            "label": "Currency",
+            "value": "EUR",
+            "type": "select",
+            "options": ["EUR", "USD", "GBP", "CHF"],
+            "status": "ai-filled",
+            "priority": "critical"
+          }
+        ]
+      },
+      "creative": {
+        "label": "Creative Direction",
+        "fields": [
+          {
+            "id": "creative_direction",
+            "label": "Creative Direction",
+            "value": "Premium emotional campaign for BMW iX electric SUV global launch. Father-daughter journey through landscapes. Music carries emotional weight, no dialogue for first 45s.",
+            "type": "textarea",
+            "status": "ai-filled",
+            "priority": "critical",
+            "placeholder": "Describe the creative vision and mood"
+          },
+          {
+            "id": "mood_keywords",
+            "label": "Mood Keywords",
+            "value": ["Premium", "sophisticated", "forward-looking", "optimistic", "emotional", "timeless", "modern electronic"],
+            "type": "tags",
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "Add mood descriptors"
+          },
+          {
+            "id": "genre_preferences",
+            "label": "Genre Preferences",
+            "value": ["Cinematic electronic", "ambient"],
+            "type": "tags",
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "Add preferred genres"
+          },
+          {
+            "id": "reference_tracks",
+            "label": "Reference Tracks",
+            "value": [
+              { "artist": "The Blaze", "title": "Territory", "notes": "Love the cinematic build" },
+              { "artist": "Jon Hopkins", "title": "Open Eye Signal", "notes": "The rolling energy" },
+              { "artist": "Ólafur Arnalds", "title": null, "notes": "The emotional electronics" }
+            ],
+            "type": "reference-list",
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "Add reference tracks"
+          },
+          {
+            "id": "must_avoid",
+            "label": "Must Avoid",
+            "value": "Imagine Dragons-style epic rock, cheesy",
+            "type": "textarea",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "What to avoid in music selection"
+          },
+          {
+            "id": "vocals_preference",
+            "label": "Vocals Preference",
+            "value": "instrumental",
+            "type": "select",
+            "options": ["instrumental", "vocals", "either", "specific"],
+            "status": "user-edited",
+            "priority": "important"
+          }
+        ]
+      }
+    },
+    "WHO": {
+      "projectTeam": {
+        "label": "Project Team",
+        "fields": [
+          {
+            "id": "account_manager",
+            "label": "Account Manager (AM)",
+            "value": { "id": "user-002", "name": "Lisa Weber", "avatar": null },
+            "type": "team-select",
+            "status": "user-edited",
+            "priority": "critical",
+            "placeholder": "Assign account manager"
+          },
+          {
+            "id": "music_supervisor",
+            "label": "Music Supervisor (MS)",
+            "value": { "id": "user-003", "name": "Max Fischer", "avatar": null },
+            "type": "team-select",
+            "status": "user-edited",
+            "priority": "critical",
+            "placeholder": "Assign music supervisor"
+          },
+          {
+            "id": "project_manager",
+            "label": "Project Manager (PM)",
+            "value": { "id": "user-004", "name": "Anna Schmidt", "avatar": null },
+            "type": "team-select",
+            "status": "user-edited",
+            "priority": "important",
+            "placeholder": "Assign project manager"
+          },
+          {
+            "id": "music_coordinator",
+            "label": "Music Coordinator (MC)",
+            "value": null,
+            "type": "team-select",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Assign coordinator"
+          },
+          {
+            "id": "business_affairs",
+            "label": "Business Affairs (BA)",
+            "value": { "id": "user-005", "name": "Thomas Müller", "avatar": null },
+            "type": "team-select",
+            "status": "user-edited",
+            "priority": "important",
+            "placeholder": "Assign BA contact"
+          },
+          {
+            "id": "management",
+            "label": "Management (MGMT)",
+            "value": { "id": "user-001", "name": "Julia Richter", "avatar": null },
+            "type": "team-select",
+            "status": "user-edited",
+            "priority": "critical",
+            "showFor": ["A", "B"],
+            "placeholder": "Required for Type A/B projects"
+          }
+        ]
+      },
+      "external": {
+        "label": "External Contacts",
+        "fields": [
+          {
+            "id": "composers",
+            "label": "Composers",
+            "value": [],
+            "type": "multi-team-select",
+            "status": "empty",
+            "priority": "helpful",
+            "showFor": ["Production"],
+            "placeholder": "Add composers if bespoke"
+          },
+          {
+            "id": "external_partners",
+            "label": "External Partners",
+            "value": "",
+            "type": "text",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Labels, publishers, agencies"
+          }
+        ]
+      }
+    },
+    "WITH_WHAT": {
+      "musicSource": {
+        "label": "Music Source",
+        "fields": [
+          {
+            "id": "source_type",
+            "label": "Source Type",
+            "value": "Request + playlist",
+            "type": "select",
+            "options": ["Internal only", "Request + playlist", "Label/publisher briefing", "Blanket license", "Bespoke composition"],
+            "status": "user-edited",
+            "priority": "important",
+            "placeholder": "How will music be sourced?"
+          },
+          {
+            "id": "submission_rules",
+            "label": "Submission Rules",
+            "value": "Open to sync of existing track OR bespoke composition. Need stems for language versions.",
+            "type": "textarea",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "Any rules for submissions"
+          }
+        ]
+      },
+      "deliverables": {
+        "label": "Deliverables",
+        "fields": [
+          {
+            "id": "deliverable_formats",
+            "label": "Deliverable Format",
+            "value": [],
+            "type": "multi-select",
+            "options": ["playlist link", "shortlist file", "comparison notes", "demo", "presentation deck"],
+            "status": "empty",
+            "priority": "important",
+            "placeholder": "What format for delivery?"
+          },
+          {
+            "id": "file_formats",
+            "label": "File Formats",
+            "value": ["WAV", "MP3"],
+            "type": "multi-select",
+            "options": ["WAV", "MP3", "AIFF", "stems"],
+            "status": "user-edited",
+            "priority": "helpful",
+            "placeholder": "Required audio formats"
+          },
+          {
+            "id": "stems_required",
+            "label": "Stems Required",
+            "value": true,
+            "type": "boolean",
+            "status": "user-edited",
+            "priority": "important"
+          },
+          {
+            "id": "stems_details",
+            "label": "Stems Details",
+            "value": "Required for all language versions",
+            "type": "textarea",
+            "status": "user-edited",
+            "priority": "helpful",
+            "placeholder": "Specify stem requirements",
+            "dependsOn": { "field": "stems_required", "value": true }
+          }
+        ]
+      },
+      "technical": {
+        "label": "Technical Specs",
+        "fields": [
+          {
+            "id": "sync_points",
+            "label": "Sync Points",
+            "value": "Opening shot at 0:00, emotional peak at 0:28, logo resolve at 0:52",
+            "type": "textarea",
+            "status": "user-edited",
+            "priority": "important",
+            "placeholder": "Key timing moments"
+          },
+          {
+            "id": "pre_clearance",
+            "label": "Pre-clearance Required",
+            "value": true,
+            "type": "boolean",
+            "status": "user-edited",
+            "priority": "helpful"
+          }
+        ]
+      }
+    },
+    "WHEN": {
+      "keyDates": {
+        "label": "Key Dates",
+        "fields": [
+          {
+            "id": "kickoff_date",
+            "label": "Kick-off Date",
+            "value": "2024-12-16",
+            "type": "date",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "Project start date"
+          },
+          {
+            "id": "first_presentation_date",
+            "label": "First Presentation",
+            "value": "2024-12-20",
+            "type": "date",
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "Internal first look"
+          },
+          {
+            "id": "client_presentation_date",
+            "label": "Client Presentation",
+            "value": "2025-01-06",
+            "type": "date",
+            "status": "ai-filled",
+            "priority": "important",
+            "placeholder": "Present to client"
+          },
+          {
+            "id": "deadline_date",
+            "label": "Final Deadline",
+            "value": "2025-01-15",
+            "type": "date",
+            "status": "ai-filled",
+            "priority": "critical",
+            "placeholder": "Final approval needed"
+          },
+          {
+            "id": "air_date",
+            "label": "Air Date",
+            "value": "2025-01-25",
+            "type": "date",
+            "status": "ai-filled",
+            "priority": "critical",
+            "placeholder": "Campaign launch"
+          }
+        ]
+      },
+      "urgency": {
+        "label": "Urgency",
+        "fields": [
+          {
+            "id": "deadline_urgency",
+            "label": "Deadline Urgency",
+            "value": "rush",
+            "type": "select",
+            "options": ["standard", "rush", "urgent"],
+            "status": "ai-filled",
+            "priority": "important"
+          },
+          {
+            "id": "timing_notes",
+            "label": "Timing Notes",
+            "value": "Super Bowl adjacent timing. Very tight turnaround over holiday period.",
+            "type": "textarea",
+            "status": "user-edited",
+            "priority": "helpful",
+            "placeholder": "Additional timing context"
+          }
+        ]
+      }
+    },
+    "OTHER": {
+      "context": {
+        "label": "Campaign Context",
+        "fields": [
+          {
+            "id": "campaign_context",
+            "label": "Campaign Background",
+            "value": "BMW is launching their new iX electric SUV globally. Premium, emotional campaign about the future of mobility.",
+            "type": "textarea",
+            "status": "ai-filled",
+            "priority": "helpful",
+            "placeholder": "Background on the campaign"
+          },
+          {
+            "id": "target_audience",
+            "label": "Target Audience",
+            "value": "",
+            "type": "textarea",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Who is this campaign for?"
+          },
+          {
+            "id": "brand_values",
+            "label": "Brand Values",
+            "value": [],
+            "type": "tags",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Add brand attributes"
+          },
+          {
+            "id": "previous_music",
+            "label": "Previous Music",
+            "value": "",
+            "type": "textarea",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Past music used by client"
+          },
+          {
+            "id": "competitor_info",
+            "label": "Competitor Info",
+            "value": "",
+            "type": "textarea",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Competitor music usage"
+          }
+        ]
+      },
+      "notes": {
+        "label": "Notes & Comments",
+        "fields": [
+          {
+            "id": "notes",
+            "label": "Additional Notes",
+            "value": "Client mentioned they're open to bespoke composition as well as sync. High priority project with executive visibility.",
+            "type": "textarea",
+            "status": "user-edited",
+            "priority": "helpful",
+            "placeholder": "Any other relevant notes"
+          },
+          {
+            "id": "approval_risks",
+            "label": "Approval Risks",
+            "value": "",
+            "type": "textarea",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Known approval challenges"
+          }
+        ]
+      },
+      "attachments": {
+        "label": "Attachments & Links",
+        "fields": [
+          {
+            "id": "creative_deck_link",
+            "label": "Creative Deck",
+            "value": "https://docs.google.com/presentation/d/abc123",
+            "type": "url",
+            "status": "user-edited",
+            "priority": "helpful",
+            "placeholder": "Link to creative deck"
+          },
+          {
+            "id": "agency_brief_link",
+            "label": "Agency Brief",
+            "value": "",
+            "type": "url",
+            "status": "empty",
+            "priority": "helpful",
+            "placeholder": "Link to original brief"
+          },
+          {
+            "id": "reference_playlist_link",
+            "label": "Reference Playlist",
+            "value": "https://open.spotify.com/playlist/xyz789",
+            "type": "url",
+            "status": "user-edited",
+            "priority": "helpful",
+            "placeholder": "Spotify/Apple Music playlist"
+          }
+        ]
+      }
+    }
+  },
+  "teamMembers": [
+    { "id": "user-001", "name": "Julia Richter", "role": "Managing Director", "avatar": null },
+    { "id": "user-002", "name": "Lisa Weber", "role": "Account Manager", "avatar": null },
+    { "id": "user-003", "name": "Max Fischer", "role": "Senior Music Supervisor", "avatar": null },
+    { "id": "user-004", "name": "Anna Schmidt", "role": "Project Manager", "avatar": null },
+    { "id": "user-005", "name": "Thomas Müller", "role": "Business Affairs", "avatar": null },
+    { "id": "user-006", "name": "Sarah Klein", "role": "Music Coordinator", "avatar": null },
+    { "id": "user-007", "name": "David Braun", "role": "Junior Music Supervisor", "avatar": null }
+  ],
+  "integrationStatus": {
+    "slack": {
+      "connected": true,
+      "channelName": "#bmw-electric-future",
+      "channelUrl": "https://trackfinders.slack.com/archives/C0123456789",
+      "connectedAt": "2024-12-16T10:00:00Z"
+    },
+    "nextcloud": {
+      "connected": false,
+      "folderPath": null,
+      "folderUrl": null,
+      "connectedAt": null
+    }
+  },
+  "classificationReasoning": {
+    "currentType": "A",
+    "calculatedType": "A",
+    "isOverridden": false,
+    "reasoning": "Budget of €175,000 exceeds €100,000 threshold for Type A classification. Global territory and full media coverage justify premium tier. Full workflow with management oversight required."
+  }
+}

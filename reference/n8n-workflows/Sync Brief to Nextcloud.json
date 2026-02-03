@@ -1,0 +1,596 @@
+{
+  "name": "Sync Brief to Nextcloud",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sync-brief-to-nextcloud",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Trigger Sync",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        192,
+        0
+      ],
+      "webhookId": "sync-brief-to-nextcloud-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $json.body || $json;\nconst caseId = body.case_id || body.caseId;\nconst sessionId = body.session_id || body.sessionId;\n\nif (!caseId && !sessionId) {\n  throw new Error('Either case_id or session_id is required');\n}\n\nreturn {\n  json: {\n    caseId: caseId,\n    sessionId: sessionId,\n    lookupBy: caseId ? 'case_id' : 'session_id'\n  }\n};"
+      },
+      "id": "parse-input",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.id as case_id,\n  c.case_number,\n  c.catchy_case_id,\n  c.case_title,\n  c.slack_channel_id,\n  b.id as brief_id,\n  b.analysis,\n  b.version,\n  b.session_id\nFROM tf_cases c\nJOIN tf_briefs b ON b.case_id = c.id\nWHERE CASE \n  WHEN $1 = 'case_id' THEN c.id = $2::uuid\n  WHEN $1 = 'session_id' THEN b.session_id = $3\n  ELSE FALSE\nEND\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [\n  $json.lookupBy,\n  $json.caseId || null,\n  $json.sessionId || null\n] }}"
+        }
+      },
+      "id": "fetch-case-data",
+      "name": "Fetch Case & Brief Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        608,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const caseData = $json;\nconst briefData = $json.analysis || {};\n\nconst business = briefData.business_brief || {};\nconst creative = briefData.creative_brief || {};\nconst contextual = briefData.contextual_brief || {};\nconst technical = briefData.technical_brief || {};\nconst deliverables = briefData.deliverables || {};\nconst competitive = briefData.competitive_brief || {};\nconst missing = briefData.missing_information || {};\n\nfunction arr(a) { return Array.isArray(a) && a.length ? a.join(', ') : '-'; }\nfunction list(a) { \n  if (!Array.isArray(a) || !a.length) return '-';\n  return a.map(x => {\n    if (typeof x === 'string') return `- ${x}`;\n    return `- ${x.field || x.name || x.track || 'Item'}: ${x.question || x.reason || x.note || x.details || ''}`;\n  }).join('\\n');\n}\n\n// Handle missing_information being either array or object\nlet missingList = [];\nif (Array.isArray(missing)) {\n  missingList = missing;\n} else if (typeof missing === 'object') {\n  if (missing.critical) missingList = missingList.concat(missing.critical.map(m => ({field: m, priority: 'critical'})));\n  if (missing.optional) missingList = missingList.concat(missing.optional.map(m => ({field: m, priority: 'optional'})));\n}\n\nconst md = `# ${caseData.catchy_case_id} — ${caseData.case_title}\n\n**Case Number:** ${caseData.case_number}  \n**Version:** ${caseData.version}  \n**Last Updated:** ${new Date().toISOString().slice(0, 10)}  \n**Quality:** ${briefData.brief_quality || 'unknown'} (${Math.round((briefData.confidence_score || 0) * 100)}% confidence)  \n**Extraction Status:** ${briefData.extraction_status || 'unknown'}  \n\n---\n\n## 1) Business Brief\n- **Client:** ${business.client || '-'}\n- **Agency:** ${business.agency || '-'}\n- **Brand:** ${business.brand || '-'}\n- **Media:** ${arr(business.media)}\n- **Term:** ${business.term || '-'}\n- **Territory:** ${arr(business.territory)}\n- **Budget:** ${business.budget || '-'}\n- **Lengths:** ${arr(business.lengths)}\n- **Cutdowns:** ${arr(business.cutdowns)}\n- **Extras:** ${arr(business.extras)}\n\n## 2) Creative Brief\n- **Mood:** ${creative.mood || '-'}\n- **Keywords:** ${arr(creative.keywords)}\n- **Genres:** ${arr(creative.genres)}\n- **Instruments:** ${arr(creative.instruments)}\n\n**Reference Tracks:**\n${list(creative.reference_tracks)}\n\n**Descriptions:**  \n${creative.descriptions || '-'}\n\n**Lyrics Requirements:**  \n${creative.lyrics_requirements || '-'}\n\n### Enhanced Interpretation\n- **Search Keywords:** ${arr(creative.enhanced_interpretation?.search_keywords)}\n- **Mood Descriptors:** ${arr(creative.enhanced_interpretation?.mood_descriptors)}\n- **Genre Suggestions:** ${arr(creative.enhanced_interpretation?.genre_suggestions)}\n\n**Reference Analysis:**  \n${creative.enhanced_interpretation?.reference_analysis || '-'}\n\n## 3) Contextual Brief\n- **Brand:** ${contextual.brand || business.brand || '-'}\n- **Brand Category:** ${contextual.brand_category || '-'}\n- **Brand Attributes:** ${arr(contextual.brand_attributes)}\n- **Audience:** ${contextual.audience_preferences || '-'}\n\n**Story:**  \n${contextual.story || '-'}\n\n## 4) Technical Brief\n- **Lengths:** ${arr(technical.lengths)}\n- **BPM:** ${technical.musical_attributes?.bpm || '-'}\n- **Key:** ${technical.musical_attributes?.key || '-'}\n- **Time Signature:** ${technical.musical_attributes?.time_signature || '-'}\n- **Stems:** ${technical.stem_requirements || '-'}\n- **Format:** ${technical.format_specs || '-'}\n\n## 5) Deliverables & Deadlines\n- **Submission:** ${deliverables.submission_deadline || '-'}\n- **PPM:** ${deliverables.ppm_date || '-'}\n- **Shoot:** ${deliverables.shoot_date || '-'}\n- **Offline:** ${deliverables.offline_date || '-'}\n- **Online:** ${deliverables.online_date || '-'}\n- **Air Date:** ${deliverables.air_date || '-'}\n\n## 6) Competitive & Stakeholders\n**Stakeholders:**  \n${arr(competitive.stakeholders)}\n\n**Competitive Landscape:**  \n${competitive.competitor_activity || '-'}\n\n**Pitch Situation:**  \n${competitive.pitch_situation || '-'}\n\n---\n\n## Missing Information (${missingList.length})\n${list(missingList)}\n\n## Extraction Notes\n${briefData.extraction_notes || briefData.notes || '-'}\n`;\n\nreturn { \n  json: { \n    ...caseData,\n    brief_md: md\n  } \n};"
+      },
+      "id": "render-markdown",
+      "name": "Render Brief Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $json.case_number }} - {{ $json.case_title }}/{{ $json.catchy_case_id }} - Brief.md",
+        "fileContent": "={{ $json.brief_md }}"
+      },
+      "id": "update-current-file",
+      "name": "Update Current Brief File",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        208
+      ],
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $('Render Brief Markdown').item.json.case_number }} - {{ $('Render Brief Markdown').item.json.case_title }}/{{ $('Render Brief Markdown').item.json.catchy_case_id }} - Brief - v{{ $('Render Brief Markdown').item.json.version }}.md",
+        "fileContent": "={{ $('Render Brief Markdown').item.json.brief_md }}"
+      },
+      "id": "create-versioned-file",
+      "name": "Create Versioned Brief File",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        400
+      ],
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "share",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $('Render Brief Markdown').item.json.case_number }} - {{ $('Render Brief Markdown').item.json.case_title }}/{{ $('Render Brief Markdown').item.json.catchy_case_id }} - Brief.md",
+        "shareType": 3,
+        "options": {}
+      },
+      "id": "share-current-file",
+      "name": "Share Current File",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        208
+      ],
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "share",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $('Render Brief Markdown').item.json.case_number }} - {{ $('Render Brief Markdown').item.json.case_title }}/{{ $('Render Brief Markdown').item.json.catchy_case_id }} - Brief - v{{ $('Render Brief Markdown').item.json.version }}.md",
+        "shareType": 3,
+        "options": {}
+      },
+      "id": "share-versioned-file",
+      "name": "Share Versioned File",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        400
+      ],
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "merge-shares",
+      "name": "Merge File Shares",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1408,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const caseData = $('Render Brief Markdown').item.json;\nconst currentFileUrl = $input.all()[0].json.url;\nconst versionedFileUrl = $input.all()[1].json.url;\n\nreturn {\n  json: {\n    channel: caseData.slack_channel_id,\n    text: `✅ Brief synced to Nextcloud (v${caseData.version})\\n\\n📄 Current: ${currentFileUrl}\\n📋 Version ${caseData.version}: ${versionedFileUrl}`,\n    caseId: caseData.case_id,\n    version: caseData.version,\n    success: true\n  }\n};"
+      },
+      "id": "build-success-notification",
+      "name": "Build Success Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-success-slack",
+      "name": "Post Success to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1808,
+        304
+      ],
+      "webhookId": "937328c6-50b5-40d0-8ba0-02e4ae956e71",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tf_case_activity (case_id, activity_type, activity_description, source, changes)\nVALUES ($1::uuid, 'brief_synced', $2, 'nextcloud_sync', $3::jsonb)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Build Success Notification').item.json.caseId,\n  'Brief synced to Nextcloud v' + $('Build Success Notification').item.json.version,\n  JSON.stringify({\n    version: $('Build Success Notification').item.json.version,\n    sync_type: 'update',\n    files_updated: ['current', 'versioned']\n  })\n] }}"
+        }
+      },
+      "id": "log-success-activity",
+      "name": "Log Success Activity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2000,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success: true, version: $('Build Success Notification').item.json.version}) }}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2208,
+        304
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const caseData = $('Render Brief Markdown').item.json;\nconst error = $json.error || {};\nconst errorMessage = error.message || JSON.stringify(error);\n\nreturn {\n  json: {\n    channel: caseData.slack_channel_id,\n    text: `⚠️ Brief was updated in database but failed to sync to Nextcloud.\\n\\nError: ${errorMessage}\\n\\nPlease contact support if this issue persists.`,\n    caseId: caseData.case_id,\n    error: errorMessage,\n    success: false\n  }\n};"
+      },
+      "id": "build-error-notification",
+      "name": "Build Error Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-error-slack",
+      "name": "Post Error to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1808,
+        512
+      ],
+      "webhookId": "155563c6-b97c-40db-a6bc-ba6e818af126",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tf_case_activity (case_id, activity_type, activity_description, source, changes)\nVALUES ($1::uuid, 'sync_failed', $2, 'nextcloud_sync', $3::jsonb)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Build Error Notification').item.json.caseId,\n  'Failed to sync brief to Nextcloud',\n  JSON.stringify({\n    error: $('Build Error Notification').item.json.error,\n    sync_type: 'update'\n  })\n] }}"
+        }
+      },
+      "id": "log-error-activity",
+      "name": "Log Error Activity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2000,
+        512
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success: false, error: $('Build Error Notification').item.json.error}) }}",
+        "options": {}
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2208,
+        512
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "case_id"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        304
+      ],
+      "id": "1f314c1d-10fb-4e80-980d-3c2643a3fb2d",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Trigger Sync": {
+      "main": [
+        []
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Case & Brief Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Case & Brief Data": {
+      "main": [
+        [
+          {
+            "node": "Render Brief Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Brief Markdown": {
+      "error": [
+        [
+          {
+            "node": "Build Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "main": [
+        [
+          {
+            "node": "Update Current Brief File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Versioned Brief File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Current Brief File": {
+      "error": [
+        [
+          {
+            "node": "Build Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "main": [
+        [
+          {
+            "node": "Share Current File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Versioned Brief File": {
+      "error": [
+        [
+          {
+            "node": "Build Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "main": [
+        [
+          {
+            "node": "Share Versioned File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Share Current File": {
+      "error": [
+        [
+          {
+            "node": "Build Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "main": [
+        [
+          {
+            "node": "Merge File Shares",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Share Versioned File": {
+      "error": [
+        [
+          {
+            "node": "Build Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "main": [
+        [
+          {
+            "node": "Merge File Shares",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge File Shares": {
+      "main": [
+        [
+          {
+            "node": "Build Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Post Success to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Success to Slack": {
+      "main": [
+        [
+          {
+            "node": "Log Success Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Success Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Error Notification": {
+      "main": [
+        [
+          {
+            "node": "Post Error to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Error to Slack": {
+      "main": [
+        [
+          {
+            "node": "Log Error Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error Activity": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "a2777a93-0b18-46eb-93f5-a92833d412eb",
+  "meta": {
+    "instanceId": "27d74fdf4a6138506ab2af8024f163764cffd6e3f1afe42b0b372c347eb2fa68"
+  },
+  "id": "xpnOcoHAwqtpm6d7",
+  "tags": []
+}

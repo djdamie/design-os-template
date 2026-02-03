@@ -1,0 +1,758 @@
+{
+  "name": "TF_brief_to_project_v5",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tf-brief-intake-v5",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "64ddc0eb-12e6-4287-b50e-181f0c06b2e7",
+      "name": "Webhook: Pre-Analyzed Brief Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1008,
+        384
+      ],
+      "webhookId": "8ec1fda1-72e6-4fbf-bfc2-91ef9ad1dbd5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate pre-analyzed brief from OpenWebUI\nconst body = $json.body || $json;\n\n// The payload should contain briefAnalysis (already analyzed by OpenWebUI)\nconst briefAnalysis = body.briefAnalysis || {};\nconst user = body.user || {};\n\n// Validate that we have the required analysis\nif (!briefAnalysis || Object.keys(briefAnalysis).length === 0) {\n  throw new Error('Missing briefAnalysis in payload. This webhook expects pre-analyzed briefs.');\n}\n\n// Extract business brief for metadata\nconst businessBrief = briefAnalysis.business_brief || {};\nconst creativeBrief = briefAnalysis.creative_brief || {};\nconst contextualBrief = briefAnalysis.contextual_brief || {};\n\n// Generate catchy title\nconst brand = businessBrief.brand || businessBrief.client || contextualBrief.brand || 'Unknown Brand';\nconst keywords = creativeBrief.keywords || [];\n\nlet caseTitle = '';\nif (keywords.length >= 2) {\n  caseTitle = `${brand} - ${keywords.slice(0, 2).join(' ')}`;\n} else if (keywords.length === 1) {\n  caseTitle = `${brand} - ${keywords[0]}`;\n} else if (creativeBrief.mood) {\n  caseTitle = `${brand} - ${creativeBrief.mood}`;\n} else {\n  caseTitle = `${brand} - New Campaign`;\n}\ncaseTitle = caseTitle.slice(0, 80);\n\nfunction slugify(s) {\n  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 60);\n}\n\n// Extract user information\nconst userEmail = user.email || 'system@tracksandfields.com';\nconst userName = user.name || 'System';\nconst userId = user.id || null;\n\n// Validate and map userRole\nconst rawRole = user.role || 'user';\nconst allowedRoles = ['user', 'admin', 'supervisor', 'coordinator', 'viewer'];\nconst userRole = allowedRoles.includes(rawRole) ? rawRole : 'user';\n\n// Extract session/project identifiers\nconst projectId = body.projectId || body.sessionId || body.chat_id || 'AUTO_' + Date.now();\nconst chatId = body.chatId || body.chat_id || null;\nconst messageId = body.messageId || body.message_id || null;\n\nreturn {\n  json: {\n    projectId: projectId,\n    userEmail: userEmail,\n    userName: userName,\n    userId: userId,\n    userRole: userRole,\n    chatId: chatId,\n    messageId: messageId,\n    caseTitle: caseTitle,\n    slug: slugify(caseTitle),\n    briefAnalysis: briefAnalysis,\n    clientName: businessBrief.client || brand,\n    keywords: keywords,\n    keywordsString: keywords.join('|||'),\n    version: body.version || 1,\n    timestamp: body.timestamp || new Date().toISOString(),\n    // No AI thread ID since analysis was done in OpenWebUI\n    aiThreadId: null,\n    aiConfidence: briefAnalysis.confidence_score || 0,\n    aiMissingFields: briefAnalysis.missing_information || [],\n    rawAiResponse: null\n  }\n};"
+      },
+      "id": "cda2b59e-79c6-49ff-a6a0-a2a23a32dc4c",
+      "name": "Extract & Validate Pre-Analyzed Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Authenticate user with role validation\nINSERT INTO tf_users (email, name, openwebui_user_id, role, last_login)\nVALUES (\n  $1,\n  $2,\n  $3,\n  CASE \n    WHEN $4 IN ('user', 'admin', 'supervisor', 'coordinator', 'viewer') THEN $4\n    ELSE 'user'\n  END,\n  NOW()\n)\nON CONFLICT (email) \nDO UPDATE SET\n  last_login = NOW(),\n  name = EXCLUDED.name,\n  openwebui_user_id = EXCLUDED.openwebui_user_id\nRETURNING id, email, name, role;",
+        "options": {
+          "queryReplacement": "={{ [\n  $json.userEmail || 'anonymous@tracksandfields.com',\n  $json.userName || 'Anonymous User',\n  $json.userId,\n  $json.userRole || 'user'\n] }}"
+        }
+      },
+      "id": "704cd5f3-a42a-4e85-b846-9846629ed2c3",
+      "name": "Authenticate User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -560,
+        384
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Create case with catchy_case_id\nINSERT INTO tf_cases (\n  case_number,\n  case_title,\n  case_owner_id,\n  created_by_id,\n  session_id,\n  status,\n  catchy_case_id\n) \nSELECT \n  case_num,\n  $1,\n  $2::uuid,\n  $2::uuid,\n  $3,\n  'brief_received',\n  'TF-' || generate_catchy_case_id(\n    regexp_replace(case_num, '[^0-9]', '', 'g'),\n    $4,\n    $1,\n    string_to_array($5, '|||')\n  )\nFROM (SELECT generate_case_number() as case_num) AS nums\nRETURNING id, case_number, catchy_case_id, case_title, session_id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Extract & Validate Pre-Analyzed Brief').item.json.caseTitle,\n  $('Authenticate User').item.json.id,\n  $('Extract & Validate Pre-Analyzed Brief').item.json.projectId,\n  $('Extract & Validate Pre-Analyzed Brief').item.json.clientName || 'Unknown',\n  $('Extract & Validate Pre-Analyzed Brief').item.json.keywordsString || ''\n] }}"
+        }
+      },
+      "id": "233ff02e-401a-4d88-a4f4-ae76c9948a77",
+      "name": "Create Case",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -336,
+        384
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Enhanced insert with extracted fields - Fixed RETURNING + Array Safety + New Columns\nWITH brief_upsert AS (\n  INSERT INTO tf_briefs (\n    case_id,\n    session_id,\n    raw_brief,\n    analysis,\n    version,\n    updated_at,\n    client,\n    agency,\n    brand,\n    media,\n    term,\n    territory,\n    budget_raw,\n    budget_min,\n    budget_max,\n    keywords,\n    genres,\n    mood_descriptors,\n    reference_tracks,\n    submission_deadline,\n    ppm_date,\n    shoot_date,\n    air_date,\n    extraction_status,\n    brief_quality,\n    completion_rate,\n    critical_fields_complete,\n    production_ready,\n    hitl_status,\n    missing_information,\n    user_email,\n    -- NEW COLUMNS\n    cutdowns,\n    lengths,\n    extras,\n    instruments,\n    mood,\n    offline_date,\n    online_date\n  )\n  VALUES (\n    $1::uuid,\n    $2,\n    $3,\n    $4::jsonb,\n    1,\n    NOW(),\n    $4::jsonb->'business_brief'->>'client',\n    $4::jsonb->'business_brief'->>'agency',\n    $4::jsonb->'business_brief'->>'brand',\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'business_brief'->'media', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'business_brief'->'media'))\n      ELSE ARRAY[]::text[]\n    END,\n    $4::jsonb->'business_brief'->>'term',\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'business_brief'->'territory', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'business_brief'->'territory'))\n      ELSE ARRAY[]::text[]\n    END,\n    $4::jsonb->'business_brief'->>'budget',\n    NULLIF(regexp_replace(COALESCE($4::jsonb->'business_brief'->>'budget', ''), '[^0-9]', '', 'g'), '')::numeric,\n    NULLIF(regexp_replace(COALESCE($4::jsonb->'business_brief'->>'budget', ''), '[^0-9]', '', 'g'), '')::numeric,\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'creative_brief'->'keywords', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'creative_brief'->'keywords'))\n      ELSE ARRAY[]::text[]\n    END,\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'creative_brief'->'genres', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'creative_brief'->'genres'))\n      ELSE ARRAY[]::text[]\n    END,\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'creative_brief'->'enhanced_interpretation'->'mood_descriptors', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'creative_brief'->'enhanced_interpretation'->'mood_descriptors'))\n      ELSE ARRAY[]::text[]\n    END,\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'creative_brief'->'reference_tracks', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'creative_brief'->'reference_tracks'))\n      ELSE ARRAY[]::text[]\n    END,\n    CASE WHEN $4::jsonb->'deliverables'->>'submission_deadline' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' \n         THEN ($4::jsonb->'deliverables'->>'submission_deadline')::timestamp \n         ELSE NULL END,\n    CASE WHEN $4::jsonb->'deliverables'->>'ppm_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' \n         THEN ($4::jsonb->'deliverables'->>'ppm_date')::timestamp \n         ELSE NULL END,\n    CASE WHEN $4::jsonb->'deliverables'->>'shoot_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' \n         THEN ($4::jsonb->'deliverables'->>'shoot_date')::timestamp \n         ELSE NULL END,\n    CASE WHEN $4::jsonb->'deliverables'->>'air_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' \n         THEN ($4::jsonb->'deliverables'->>'air_date')::timestamp \n         ELSE NULL END,\n    $4::jsonb->>'extraction_status',\n    $4::jsonb->>'brief_quality',\n    COALESCE(($4::jsonb->'extraction_metrics'->>'completion_rate')::numeric, 0),\n    COALESCE(($4::jsonb->'extraction_metrics'->>'critical_field_success')::boolean, false),\n    COALESCE(($4::jsonb->'extraction_metrics'->>'production_ready')::boolean, false),\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'missing_information', '[]'::jsonb)) = 'array'\n           AND jsonb_array_length(COALESCE($4::jsonb->'missing_information', '[]'::jsonb)) > 0\n      THEN 'pending'\n      ELSE 'completed'\n    END,\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'missing_information', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'missing_information'))\n      ELSE ARRAY[]::text[]\n    END,\n    $5,\n    -- NEW COLUMN EXTRACTIONS\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'business_brief'->'cutdowns', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'business_brief'->'cutdowns'))\n      ELSE ARRAY[]::text[]\n    END,\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'technical_brief'->'lengths', $4::jsonb->'business_brief'->'lengths', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text(COALESCE($4::jsonb->'technical_brief'->'lengths', $4::jsonb->'business_brief'->'lengths')))\n      ELSE ARRAY[]::text[]\n    END,\n    CASE \n      WHEN jsonb_typeof($4::jsonb->'business_brief'->'extras') = 'string'\n      THEN NULLIF(TRIM($4::jsonb->'business_brief'->>'extras'), '')\n      WHEN jsonb_typeof($4::jsonb->'business_brief'->'extras') = 'array'\n      THEN (\n        SELECT string_agg(value::text, ', ')\n        FROM jsonb_array_elements_text($4::jsonb->'business_brief'->'extras') AS value\n        WHERE TRIM(value::text) != ''\n      )\n      ELSE NULL\n    END,\n    CASE \n      WHEN jsonb_typeof(COALESCE($4::jsonb->'creative_brief'->'instruments', '[]'::jsonb)) = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($4::jsonb->'creative_brief'->'instruments'))\n      ELSE ARRAY[]::text[]\n    END,\n    $4::jsonb->'creative_brief'->>'mood',\n    CASE WHEN $4::jsonb->'deliverables'->>'offline_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' \n         THEN ($4::jsonb->'deliverables'->>'offline_date')::timestamp \n         ELSE NULL END,\n    CASE WHEN $4::jsonb->'deliverables'->>'online_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' \n         THEN ($4::jsonb->'deliverables'->>'online_date')::timestamp \n         ELSE NULL END\n  )\n  ON CONFLICT (session_id)\n  DO UPDATE SET\n    analysis = EXCLUDED.analysis,\n    version = tf_briefs.version + 1,\n    updated_at = NOW(),\n    client = EXCLUDED.client,\n    agency = EXCLUDED.agency,\n    brand = EXCLUDED.brand,\n    keywords = EXCLUDED.keywords,\n    genres = EXCLUDED.genres,\n    mood_descriptors = EXCLUDED.mood_descriptors,\n    completion_rate = EXCLUDED.completion_rate,\n    hitl_status = EXCLUDED.hitl_status,\n    missing_information = EXCLUDED.missing_information,\n    -- NEW COLUMN UPDATES\n    cutdowns = EXCLUDED.cutdowns,\n    lengths = EXCLUDED.lengths,\n    extras = EXCLUDED.extras,\n    instruments = EXCLUDED.instruments,\n    mood = EXCLUDED.mood,\n    offline_date = EXCLUDED.offline_date,\n    online_date = EXCLUDED.online_date\n  RETURNING \n    id, \n    case_id, \n    session_id, \n    version, \n    client, \n    brand, \n    completion_rate,\n    hitl_status\n)\nSELECT \n  b.id, \n  b.case_id, \n  b.session_id, \n  b.version, \n  b.client, \n  b.brand, \n  b.completion_rate,\n  b.hitl_status\nFROM brief_upsert b;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Create Case').item.json.id,\n  $('Extract & Validate Pre-Analyzed Brief').item.json.projectId,\n  'Brief analyzed in OpenWebUI and submitted via action',\n  JSON.stringify($('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis),\n  $('Extract & Validate Pre-Analyzed Brief').item.json.userEmail\n] }}"
+        }
+      },
+      "id": "e5237d4b-1876-4b39-a62b-f640084f4563",
+      "name": "Save Enhanced Brief",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -112,
+        576
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Render brief markdown (same as v2)\nconst caseData = $('Create Case').item.json;\nconst parsedData = $('Extract & Validate Pre-Analyzed Brief').item.json;\nconst briefData = parsedData.briefAnalysis || {};\n\nconst business = briefData.business_brief || {};\nconst creative = briefData.creative_brief || {};\nconst contextual = briefData.contextual_brief || {};\nconst technical = briefData.technical_brief || {};\nconst deliverables = briefData.deliverables || {};\nconst competitive = briefData.competitive_brief || {};\nconst missing = briefData.missing_information || [];\n\nfunction arr(a) { return Array.isArray(a) && a.length ? a.join(', ') : '-'; }\nfunction list(a) { \n  if (!Array.isArray(a) || !a.length) return '-';\n  return a.map(x => {\n    if (typeof x === 'string') return `- ${x}`;\n    return `- ${x.field || x.name || x.track || 'Item'}: ${x.question || x.reason || x.note || x.details || ''}`;\n  }).join('\\n');\n}\n\nconst md = `# ${caseData.catchy_case_id} — ${caseData.case_title}\n\n**Case Number:** ${caseData.case_number}  \n**Created:** ${new Date().toISOString().slice(0, 10)}  \n**Quality:** ${briefData.brief_quality || 'unknown'} (${Math.round((briefData.confidence_score || 0) * 100)}% confidence)  \n**Extraction Status:** ${briefData.extraction_status || 'unknown'}  \n**Analyzed In:** OpenWebUI (v3 workflow)  \n**Chat ID:** ${parsedData.chatId || 'N/A'}  \n\n---\n\n## 1) Business Brief\n- **Client:** ${business.client || '-'}\n- **Agency:** ${business.agency || '-'}\n- **Brand:** ${business.brand || '-'}\n- **Media:** ${arr(business.media)}\n- **Term:** ${business.term || '-'}\n- **Territory:** ${arr(business.territory)}\n- **Budget:** ${business.budget || '-'}\n- **Lengths:** ${arr(business.lengths)}\n- **Cutdowns:** ${arr(business.cutdowns)}\n- **Extras:** ${arr(business.extras)}\n\n## 2) Creative Brief\n- **Mood:** ${creative.mood || '-'}\n- **Keywords:** ${arr(creative.keywords)}\n- **Genres:** ${arr(creative.genres)}\n- **Instruments:** ${arr(creative.instruments)}\n\n**Reference Tracks:**\n${list(creative.reference_tracks)}\n\n**Descriptions:**  \n${creative.descriptions || '-'}\n\n**Lyrics Requirements:**  \n${creative.lyrics_requirements || '-'}\n\n### Enhanced Interpretation\n- **Search Keywords:** ${arr(creative.enhanced_interpretation?.search_keywords)}\n- **Mood Descriptors:** ${arr(creative.enhanced_interpretation?.mood_descriptors)}\n- **Genre Suggestions:** ${arr(creative.enhanced_interpretation?.genre_suggestions)}\n\n**Reference Analysis:**  \n${creative.enhanced_interpretation?.reference_analysis || '-'}\n\n## 3) Contextual Brief\n- **Brand:** ${contextual.brand || business.brand || '-'}\n- **Brand Category:** ${contextual.brand_category || '-'}\n- **Brand Attributes:** ${arr(contextual.brand_attributes)}\n- **Audience:** ${contextual.audience_preferences || '-'}\n\n**Story:**  \n${contextual.story || '-'}\n\n## 4) Technical Brief\n- **Lengths:** ${arr(technical.lengths)}\n- **BPM:** ${technical.musical_attributes?.bpm || '-'}\n- **Key:** ${technical.musical_attributes?.key || '-'}\n- **Time Signature:** ${technical.musical_attributes?.time_signature || '-'}\n- **Stems:** ${technical.stem_requirements || '-'}\n- **Format:** ${technical.format_specs || '-'}\n\n## 5) Deliverables & Deadlines\n- **Submission:** ${deliverables.submission_deadline || '-'}\n- **PPM:** ${deliverables.ppm_date || '-'}\n- **Shoot:** ${deliverables.shoot_date || '-'}\n- **Offline:** ${deliverables.offline_date || '-'}\n- **Online:** ${deliverables.online_date || '-'}\n- **Air Date:** ${deliverables.air_date || '-'}\n\n## 6) Competitive & Stakeholders\n**Stakeholders:**  \n${arr(competitive.stakeholders)}\n\n**Competitive Landscape:**  \n${competitive.competitor_activity || '-'}\n\n**Pitch Situation:**  \n${competitive.pitch_situation || '-'}\n\n---\n\n## Missing Information (${missing.length})\n${list(missing)}\n\n## Extraction Notes\n${briefData.extraction_notes || briefData.notes || '-'}\n`;\n\nreturn { json: { brief_md: md, brief_json: JSON.stringify(briefData, null, 2) } };"
+      },
+      "id": "1005a7fb-6440-4c20-8abe-48386a0336f8",
+      "name": "Render Brief Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "channel",
+        "channelId": "={{ $json.catchy_case_id.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 80) }}"
+      },
+      "id": "2e2bb4d6-2d92-4b46-975d-70388419bd82",
+      "name": "Slack: Create Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        -176,
+        -208
+      ],
+      "webhookId": "a266a5b9-9331-4301-9028-c4f48445e75b",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Slack: Create Channel').item.json.id }}",
+          "mode": "id"
+        },
+        "text": "=🎵 Welcome to {{ $('Create Case').item.json.catchy_case_id }}\n\n**Project:** {{ $('Create Case').item.json.case_title }}\n**Client:** {{ $('Extract & Validate Pre-Analyzed Brief').item.json.clientName }}\n**Owner:** {{ $('Extract & Validate Pre-Analyzed Brief').item.json.userName }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "41839744-274a-4c64-8d09-49527ca45305",
+      "name": "Slack: Post Welcome",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1184,
+        -64
+      ],
+      "webhookId": "d095b6d4-8f65-4997-b0e3-cd9ccd5fc16d",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "text": "=📋 **Brief Analysis Summary**\n\n**Client:** {{ $('Extract & Validate Pre-Analyzed Brief').item.json.clientName || 'Not specified' }}\n**Brand:** {{ $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.business_brief && $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.business_brief.brand || 'Not specified' }}\n**Budget:** {{ $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.business_brief && $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.business_brief.budget || 'Not specified' }}\n\n**Creative Direction:**\n• Mood: {{ $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.creative_brief && $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.creative_brief.mood || 'Not specified' }}\n• Keywords: {{ ($('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.creative_brief && $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.creative_brief.keywords || []).join(', ') || 'None' }}\n\n**Quality:** {{ $('Extract & Validate Pre-Analyzed Brief').item.json.briefAnalysis.brief_quality || 'unknown' }}\n\n📄 **Brief Document:** {{ $input.all()[1].json.url }}\n📁 **Project Folder:** {{ $input.all()[3].json.url }}\n\n_Add any supplementary files (reference tracks, assets, etc.) to the project folder._",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "756453af-4266-4794-924c-beab542dc86f",
+      "name": "Slack: Post Brief Analysis",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        -96
+      ],
+      "webhookId": "5a9859e4-2474-403a-a414-20c897c9bcba",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tf_case_activity (case_id, activity_type, activity_description, user_id, source, changes)\nVALUES ($1::uuid, 'created', $2, $3::uuid, 'openwebui_v3', $4::jsonb)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Create Case').item.json.id,\n  'Case created from pre-analyzed brief (OpenWebUI v3)',\n  $('Authenticate User').item.json.id,\n  JSON.stringify({ \n    catchy_case_id: $('Create Case').item.json.catchy_case_id, \n    client: $('Extract & Validate Pre-Analyzed Brief').item.json.clientName,\n    chat_id: $('Extract & Validate Pre-Analyzed Brief').item.json.chatId,\n    version: $('Extract & Validate Pre-Analyzed Brief').item.json.version,\n    confidence: $('Extract & Validate Pre-Analyzed Brief').item.json.aiConfidence,\n    workflow: 'v3',\n    analyzed_in: 'openwebui'\n  })\n] }}"
+        }
+      },
+      "id": "d8d5bad0-5bf2-4909-b50d-cc60c83f7ae1",
+      "name": "Log Activity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -112,
+        768
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "createFromText",
+        "content": "={{ $json.brief_md }}",
+        "name": "={{ $('Create Case').item.json.case_title }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1qMkXBZOo2E5gZMy_z5OaQPmH1Gh7ucvf",
+          "mode": "list",
+          "cachedResultName": "Brief_Extractions",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1qMkXBZOo2E5gZMy_z5OaQPmH1Gh7ucvf"
+        },
+        "options": {
+          "convertToGoogleDocument": true
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        112,
+        128
+      ],
+      "id": "6f274692-26aa-4a67-8806-63baa0fc8460",
+      "name": "Google Drive: Upload Brief",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "TgnpxPQsvJ78JIVk",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build response for OpenWebUI\nconst caseData = $('Create Case').item.json;\nconst parsedData = $('Extract & Validate Pre-Analyzed Brief').item.json;\nconst briefDbData = $('Save Enhanced Brief').item.json;\nconst briefAnalysis = parsedData.briefAnalysis || {};\nconst business = briefAnalysis.business_brief || {};\nconst creative = briefAnalysis.creative_brief || {};\nconst missing = briefAnalysis.missing_information || [];\n\nfunction createSlackChannelName(catchyId) {\n  if (!catchyId) return 'tf-project';\n  return catchyId\n    .toLowerCase()\n    .replace(/[^a-z0-9-_]/g, '-')\n    .replace(/-+/g, '-')\n    .replace(/^-|-$/g, '')\n    .slice(0, 80);\n}\n\nconst userText = '**Brief Submitted Successfully**\\n\\n' +\n  '**Project**: ' + (caseData.case_title || 'Unknown Project') + '\\n\\n' +\n  '**Case Details:**\\n' +\n  '- Case ID: ' + (caseData.catchy_case_id || 'Not assigned') + '\\n' +\n  '- Case Number: ' + (caseData.case_number || 'Not assigned') + '\\n' +\n  '- Client: ' + (business.client || 'Not specified') + '\\n' +\n  '- Brand: ' + (business.brand || 'Not specified') + '\\n' +\n  '- Quality: ' + (briefAnalysis.brief_quality || 'unknown') + '\\n\\n' +\n  '**Status:**\\n' +\n  (missing.length > 0 ? \n    '- ' + missing.length + ' items still missing (can be added later)\\n' : \n    '- All essential information received\\n'\n  ) +\n  '\\n' +\n  'Your team has been notified via Slack channel #' + createSlackChannelName(caseData.catchy_case_id) + '\\n';\n\nreturn {\n  json: {\n    output: userText,\n    text: userText,\n    success: true,\n    case_number: caseData.case_number || null,\n    catchy_case_id: caseData.catchy_case_id || null,\n    case_title: caseData.case_title || null,\n    case_owner: {\n      name: parsedData.userName,\n      email: parsedData.userEmail\n    },\n    brief_analysis: briefAnalysis,\n    brief_quality: briefAnalysis.brief_quality || 'unknown',\n    extraction_status: briefAnalysis.extraction_status || 'unknown',\n    completion_rate: briefDbData.completion_rate || 0,\n    confidence_score: briefAnalysis.confidence_score || parsedData.aiConfidence || 0,\n    hitl_status: briefDbData.hitl_status || 'none',\n    missing_information_count: missing.length,\n    missing_information: missing,\n    session_id: caseData.session_id || parsedData.projectId,\n    version: briefDbData.version || parsedData.version || 1,\n    chat_id: parsedData.chatId,\n    message_id: parsedData.messageId,\n    slack_channel: createSlackChannelName(caseData.catchy_case_id),\n    client: parsedData.clientName || business.client,\n    brand: business.brand,\n    keywords: parsedData.keywords || creative.keywords,\n    workflow_version: 'v3',\n    analyzed_in: 'openwebui'\n  }\n};"
+      },
+      "id": "607a9a84-f325-4db6-b1a0-6f0beaa5d635",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { output: $json.text, success: $json.success, case_number: $json.case_number, catchy_case_id: $json.catchy_case_id, case_title: $json.case_title, slack_channel: $json.slack_channel } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        336,
+        576
+      ],
+      "id": "7b4ecbc2-4e2e-4b1b-b32d-6388087cc246",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1792,
+        -112
+      ],
+      "id": "21bac42d-6f3f-4b2d-9c08-960ed50be16a",
+      "name": "Merge: Wait for Drive & Channel"
+    },
+    {
+      "parameters": {
+        "jsCode": "const driveData = $input.item.json;\nconst docUrl = `https://docs.google.com/document/d/${driveData.id}/edit`;\n\nreturn {\n  json: {\n    ...driveData,\n    documentUrl: docUrl\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        128
+      ],
+      "id": "1c301daa-6cb2-4e5e-95d7-36e013f371ca",
+      "name": "Prepare Drive Link",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $('Create Case').item.json.case_number }} - {{ $('Create Case').item.json.case_title }}/{{ $('Create Case').item.json.catchy_case_id }} - Brief.md",
+        "fileContent": "={{ $('Render Brief Markdown').item.json.brief_md }}"
+      },
+      "id": "fb236eeb-cec6-4a5e-b00d-6a85ca59e0f8",
+      "name": "Nextcloud: Upload Brief",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        800,
+        368
+      ],
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "folder",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $('Create Case').item.json.case_number }} - {{ $('Create Case').item.json.case_title }}"
+      },
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        176,
+        352
+      ],
+      "id": "b3b89251-e14d-49f5-8d65-0a15f7dd6841",
+      "name": "Create a folder",
+      "alwaysOutputData": true,
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "share",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $('Create Case').item.json.case_number }} - {{ $('Create Case').item.json.case_title }}/{{ $('Create Case').item.json.catchy_case_id }} - Brief.md",
+        "shareType": 3,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        368
+      ],
+      "id": "a8de67a8-1cc0-4d0e-a95a-bce024c9e191",
+      "name": "Share brief to Slack",
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "channel",
+        "operation": "invite",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Slack: Create Channel').item.json.id }}",
+          "mode": "id"
+        },
+        "userIds": "={{ [$('Get many users').all().find(u => {\n  const slackFirstName = (u.json.profile?.first_name || '').toLowerCase().trim();\n  const dbFirstName = ($('Authenticate User').item.json.name || '').toLowerCase().trim().split(' ')[0];\n  return slackFirstName === dbFirstName;\n})?.json.id] }}"
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        944,
+        -64
+      ],
+      "id": "fa62305a-c41c-46ec-b3c6-5a566457ca7c",
+      "name": "Invite a user to a channel",
+      "webhookId": "73b3faaf-a465-450a-81b8-d2d9dcc824a8",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "user",
+        "operation": "getAll",
+        "returnAll": "={{ true }}"
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        16,
+        -64
+      ],
+      "id": "4c5d5fc6-b6a1-4832-9684-445724ff7e24",
+      "name": "Get many users",
+      "webhookId": "01f9104f-d0b1-45ec-9eab-6dfb33d71c00",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const authenticatedUser = $('Authenticate User').item.json;\nconst dbFirstName = (authenticatedUser.name || '').toLowerCase().trim().split(' ')[0];\n\n// Get current Slack user\nconst slackFirstName = ($json.profile?.first_name || '').toLowerCase().trim();\nconst slackUsername = ($json.name || '').toLowerCase().trim();\n\n// Only pass through if this is the matching user\nif (slackFirstName === dbFirstName || slackUsername === dbFirstName) {\n  return { json: $json };\n}\n\n// Return nothing if no match\nreturn null;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -64
+      ],
+      "id": "9af4fb08-bb8d-4374-9838-494afecbdf95",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tf_cases \nSET \n  slack_channel_id = $1,\n  slack_channel_name = $2,\n  updated_at = NOW()\nWHERE id = $3::uuid\nRETURNING id, slack_channel_id, slack_channel_name;",
+        "options": {
+          "queryReplacement": "={{ [\n  $json.id,\n  $json.name,\n  $('Create Case').item.json.id\n] }}"
+        }
+      },
+      "id": "store-slack-channel-id",
+      "name": "Store Slack Channel ID",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        16,
+        -320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "share",
+        "path": "=/01 - Team share/Projects/BriefBot/{{ $('Create Case').item.json.case_number }} - {{ $('Create Case').item.json.case_title }}",
+        "shareType": 3,
+        "options": {
+          "permissions": 31
+        }
+      },
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [
+        448,
+        352
+      ],
+      "id": "c27d527f-0b7f-4da6-af1d-a70fb4c3e490",
+      "name": "Share a folder",
+      "credentials": {
+        "nextCloudOAuth2Api": {
+          "id": "VSVqLyrOGkYm1BXg",
+          "name": "Transfer/NextCloud"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Pre-Analyzed Brief Intake": {
+      "main": [
+        [
+          {
+            "node": "Extract & Validate Pre-Analyzed Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Validate Pre-Analyzed Brief": {
+      "main": [
+        [
+          {
+            "node": "Authenticate User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate User": {
+      "main": [
+        [
+          {
+            "node": "Create Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Case": {
+      "main": [
+        [
+          {
+            "node": "Save Enhanced Brief",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Render Brief Markdown",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack: Create Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Enhanced Brief": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Brief Markdown": {
+      "main": [
+        [
+          {
+            "node": "Google Drive: Upload Brief",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create a folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Create Channel": {
+      "main": [
+        [
+          {
+            "node": "Get many users",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: Wait for Drive & Channel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Slack Channel ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Post Welcome": {
+      "main": [
+        [
+          {
+            "node": "Merge: Wait for Drive & Channel",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Google Drive: Upload Brief": {
+      "main": [
+        [
+          {
+            "node": "Prepare Drive Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge: Wait for Drive & Channel": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Brief Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nextcloud: Upload Brief": {
+      "main": [
+        [
+          {
+            "node": "Share brief to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a folder": {
+      "main": [
+        [
+          {
+            "node": "Share a folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invite a user to a channel": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Welcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many users": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Invite a user to a channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Share brief to Slack": {
+      "main": [
+        [
+          {
+            "node": "Merge: Wait for Drive & Channel",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Share a folder": {
+      "main": [
+        [
+          {
+            "node": "Nextcloud: Upload Brief",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: Wait for Drive & Channel",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "2e28c4e4-f55b-40c1-a68c-994d9d05f7f9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "27d74fdf4a6138506ab2af8024f163764cffd6e3f1afe42b0b372c347eb2fa68"
+  },
+  "id": "rXuPgSxcLjmsbpIe",
+  "tags": []
+}

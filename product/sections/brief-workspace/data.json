@@ -1,0 +1,13 @@
+{
+  "_meta": {
+    "models": {
+      "workspace": "A composite view combining Project Canvas and Brief Extraction chat in a split-pane layout."
+    },
+    "relationships": [
+      "Uses data from project-canvas section for the left panel (canvas)",
+      "Uses data from brief-extraction section for the right panel (chat)",
+      "Both panels share the same project context and sync bidirectionally"
+    ],
+    "dataSource": "This view imports sample data from project-canvas/data.json and brief-extraction/data.json"
+  }
+}

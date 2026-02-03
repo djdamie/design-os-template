@@ -1,0 +1,280 @@
+{
+  "_meta": {
+    "models": {
+      "serviceConnections": "External services connected to the platform (Slack, Nextcloud, Google Drive, Supabase). Each shows connection health and sync status.",
+      "integrationEvents": "A log of recent sync activity and integration events across all projects—channel created, brief synced, webhook executed, etc.",
+      "webhookConfigs": "Admin-only configuration for n8n webhook endpoints, including URLs and masked credentials.",
+      "currentUser": "The viewing user's profile and role, used to determine what they can see and do."
+    },
+    "relationships": [
+      "Integration Events reference which Service Connection triggered them",
+      "Webhook Configs belong to Service Connections for admin configuration",
+      "Current User's role determines which services and configurations are visible"
+    ]
+  },
+  "currentUser": {
+    "id": "user-sarah",
+    "name": "Sarah Chen",
+    "email": "sarah@tracksandfields.com",
+    "role": "admin",
+    "avatarUrl": null
+  },
+  "serviceConnections": [
+    {
+      "id": "svc-slack",
+      "name": "Slack",
+      "description": "Project channels, notifications, and AI-powered SlackBot",
+      "icon": "slack",
+      "status": "connected",
+      "health": "healthy",
+      "lastSyncAt": "2025-01-15T14:32:00Z",
+      "lastSyncStatus": "success",
+      "visibleToUsers": true,
+      "stats": {
+        "channelsCreated": 47,
+        "messagesSent": 1243,
+        "lastActivity": "2025-01-15T14:32:00Z"
+      },
+      "error": null
+    },
+    {
+      "id": "svc-nextcloud",
+      "name": "Nextcloud",
+      "description": "Project folders and brief document storage with versioning",
+      "icon": "cloud",
+      "status": "connected",
+      "health": "degraded",
+      "lastSyncAt": "2025-01-15T13:45:00Z",
+      "lastSyncStatus": "partial",
+      "visibleToUsers": true,
+      "stats": {
+        "foldersCreated": 47,
+        "filesUploaded": 156,
+        "lastActivity": "2025-01-15T13:45:00Z"
+      },
+      "error": "2 files failed to sync due to filename conflicts"
+    },
+    {
+      "id": "svc-gdrive",
+      "name": "Google Drive",
+      "description": "Brief document backup to shared Brief_Extractions folder",
+      "icon": "hard-drive",
+      "status": "connected",
+      "health": "healthy",
+      "lastSyncAt": "2025-01-15T14:30:00Z",
+      "lastSyncStatus": "success",
+      "visibleToUsers": true,
+      "stats": {
+        "documentsUploaded": 89,
+        "storageUsed": "245 MB",
+        "lastActivity": "2025-01-15T14:30:00Z"
+      },
+      "error": null
+    },
+    {
+      "id": "svc-supabase",
+      "name": "Supabase",
+      "description": "Database storage, user authentication, and real-time sync",
+      "icon": "database",
+      "status": "connected",
+      "health": "healthy",
+      "lastSyncAt": "2025-01-15T14:35:00Z",
+      "lastSyncStatus": "success",
+      "visibleToUsers": false,
+      "stats": {
+        "casesStored": 47,
+        "briefsStored": 47,
+        "activeUsers": 12,
+        "lastActivity": "2025-01-15T14:35:00Z"
+      },
+      "error": null
+    }
+  ],
+  "integrationEvents": [
+    {
+      "id": "evt-001",
+      "serviceId": "svc-slack",
+      "serviceName": "Slack",
+      "eventType": "channel_created",
+      "message": "Created channel #lh-summer-vibes for project",
+      "projectId": "proj-2024-047",
+      "projectName": "Lufthansa Summer Campaign",
+      "timestamp": "2025-01-15T14:32:00Z",
+      "status": "success",
+      "details": null
+    },
+    {
+      "id": "evt-002",
+      "serviceId": "svc-nextcloud",
+      "serviceName": "Nextcloud",
+      "eventType": "folder_created",
+      "message": "Created project folder /Projects/BriefBot/047 - Lufthansa Summer Campaign/",
+      "projectId": "proj-2024-047",
+      "projectName": "Lufthansa Summer Campaign",
+      "timestamp": "2025-01-15T14:31:00Z",
+      "status": "success",
+      "details": null
+    },
+    {
+      "id": "evt-003",
+      "serviceId": "svc-gdrive",
+      "serviceName": "Google Drive",
+      "eventType": "document_uploaded",
+      "message": "Uploaded brief document to Brief_Extractions",
+      "projectId": "proj-2024-047",
+      "projectName": "Lufthansa Summer Campaign",
+      "timestamp": "2025-01-15T14:30:00Z",
+      "status": "success",
+      "details": null
+    },
+    {
+      "id": "evt-004",
+      "serviceId": "svc-nextcloud",
+      "serviceName": "Nextcloud",
+      "eventType": "brief_synced",
+      "message": "Synced brief v2 to Nextcloud",
+      "projectId": "proj-2024-046",
+      "projectName": "Audi Q8 Launch",
+      "timestamp": "2025-01-15T13:45:00Z",
+      "status": "success",
+      "details": null
+    },
+    {
+      "id": "evt-005",
+      "serviceId": "svc-nextcloud",
+      "serviceName": "Nextcloud",
+      "eventType": "brief_synced",
+      "message": "Failed to sync brief - filename conflict",
+      "projectId": "proj-2024-045",
+      "projectName": "Mercedes AMG Social",
+      "timestamp": "2025-01-15T12:20:00Z",
+      "status": "failed",
+      "details": "File 'TF-00045 - Brief.md' already exists with different content. Manual resolution required."
+    },
+    {
+      "id": "evt-006",
+      "serviceId": "svc-slack",
+      "serviceName": "Slack",
+      "eventType": "message_posted",
+      "message": "Posted brief analysis summary to #audi-q8-launch",
+      "projectId": "proj-2024-046",
+      "projectName": "Audi Q8 Launch",
+      "timestamp": "2025-01-15T11:15:00Z",
+      "status": "success",
+      "details": null
+    },
+    {
+      "id": "evt-007",
+      "serviceId": "svc-slack",
+      "serviceName": "Slack",
+      "eventType": "webhook_executed",
+      "message": "SlackBot responded to @mention in #bmw-summer-drive",
+      "projectId": "proj-2024-042",
+      "projectName": "BMW Summer Drive",
+      "timestamp": "2025-01-15T10:45:00Z",
+      "status": "success",
+      "details": null
+    },
+    {
+      "id": "evt-008",
+      "serviceId": "svc-supabase",
+      "serviceName": "Supabase",
+      "eventType": "case_created",
+      "message": "Created case record TF-00047",
+      "projectId": "proj-2024-047",
+      "projectName": "Lufthansa Summer Campaign",
+      "timestamp": "2025-01-15T14:29:00Z",
+      "status": "success",
+      "details": null
+    },
+    {
+      "id": "evt-009",
+      "serviceId": "svc-gdrive",
+      "serviceName": "Google Drive",
+      "eventType": "webhook_failed",
+      "message": "Rate limit exceeded - retry scheduled",
+      "projectId": null,
+      "projectName": null,
+      "timestamp": "2025-01-15T09:30:00Z",
+      "status": "failed",
+      "details": "Google API quota exceeded. Automatic retry in 60 seconds."
+    },
+    {
+      "id": "evt-010",
+      "serviceId": "svc-gdrive",
+      "serviceName": "Google Drive",
+      "eventType": "webhook_retried",
+      "message": "Retry successful after rate limit",
+      "projectId": null,
+      "projectName": null,
+      "timestamp": "2025-01-15T09:31:00Z",
+      "status": "success",
+      "details": null
+    }
+  ],
+  "webhookConfigs": [
+    {
+      "id": "wh-001",
+      "serviceId": "svc-slack",
+      "name": "Project Initialization",
+      "workflowName": "TF_brief_to_project_v5",
+      "webhookUrl": "https://n8n.tracksandfields.com/webhook/tf-brief-intake-v5",
+      "method": "POST",
+      "enabled": true,
+      "lastTriggered": "2025-01-15T14:29:00Z",
+      "successRate": 98.5,
+      "totalExecutions": 203
+    },
+    {
+      "id": "wh-002",
+      "serviceId": "svc-slack",
+      "name": "SlackBot Mention Handler",
+      "workflowName": "SlackBot",
+      "webhookUrl": "https://n8n.tracksandfields.com/webhook/slack-bot-mention",
+      "method": "POST",
+      "enabled": true,
+      "lastTriggered": "2025-01-15T10:45:00Z",
+      "successRate": 96.2,
+      "totalExecutions": 847
+    },
+    {
+      "id": "wh-003",
+      "serviceId": "svc-nextcloud",
+      "name": "Brief Sync to Nextcloud",
+      "workflowName": "Sync Brief to Nextcloud",
+      "webhookUrl": "https://n8n.tracksandfields.com/webhook/sync-brief-to-nextcloud",
+      "method": "POST",
+      "enabled": true,
+      "lastTriggered": "2025-01-15T13:45:00Z",
+      "successRate": 94.1,
+      "totalExecutions": 312
+    },
+    {
+      "id": "wh-004",
+      "serviceId": "svc-supabase",
+      "name": "OpenWebUI Brief Update",
+      "workflowName": "Update Brief from OpenWebUI",
+      "webhookUrl": "https://n8n.tracksandfields.com/webhook/openwebui-brief-update",
+      "method": "POST",
+      "enabled": false,
+      "lastTriggered": "2025-01-10T16:20:00Z",
+      "successRate": 89.3,
+      "totalExecutions": 156
+    }
+  ],
+  "pendingRetries": [
+    {
+      "id": "retry-001",
+      "eventId": "evt-005",
+      "serviceId": "svc-nextcloud",
+      "serviceName": "Nextcloud",
+      "projectId": "proj-2024-045",
+      "projectName": "Mercedes AMG Social",
+      "description": "Brief sync failed - filename conflict",
+      "failedAt": "2025-01-15T12:20:00Z",
+      "retryCount": 0,
+      "maxRetries": 3,
+      "canRetry": true
+    }
+  ]
+}

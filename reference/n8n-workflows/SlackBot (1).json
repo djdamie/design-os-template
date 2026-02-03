@@ -1,0 +1,923 @@
+{
+  "name": "SlackBot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-bot-mention",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2bb0fa74-aece-49f9-a59a-48a7e3a7ba44",
+      "name": "Webhook: Slack Mention",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1120,
+        -176
+      ],
+      "webhookId": "slack-bot-mention-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse Slack app_mention event\nconst body = $json.body || $json;\n\n// Handle Slack URL verification challenge (keep this for initial setup)\nif (body.type === 'url_verification') {\n  return {\n    json: {\n      challenge: body.challenge,\n      isChallenge: true,\n      skipProcessing: true\n    }\n  };\n}\n\n// Parse the app_mention event\nconst event = body.event || {};\nconst messageText = event.text || '';\nconst channelId = event.channel || '';\nconst userId = event.user || '';\nconst threadTs = event.thread_ts || event.ts || '';\nconst messageTs = event.ts || '';\n\n// Check if this is a reaction event (for confirmations)\nconst isReaction = body.event?.type === 'reaction_added';\nconst reactionName = body.event?.reaction || '';\n\n// Remove bot mention from message text\nconst botMention = /<@[A-Z0-9]+>/g;\nconst cleanMessage = messageText.replace(botMention, '').trim();\n\n// Note: channel_name is not available in app_mention events\n// We'll fetch it using Slack API in the next node\nconst channelName = body.event?.channel_name || '';\n\nreturn {\n  json: {\n    messageText: cleanMessage,\n    originalText: messageText,\n    channelId: channelId,\n    channelName: channelName,\n    userId: userId,\n    threadTs: threadTs,\n    messageTs: messageTs,\n    needsChannelInfo: true, // Flag to fetch channel info\n    isReaction: isReaction,\n    reactionName: reactionName,\n    isChallenge: false,\n    skipProcessing: false,\n    rawEvent: event,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "e70a54e7-057d-46ec-8ef7-ad424e0d6281",
+      "name": "Parse Slack Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "channel",
+        "operation": "get",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channelId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "321728d2-2005-484c-ab7a-8899b486bbfa",
+      "name": "Get Channel Info",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        -448,
+        -80
+      ],
+      "webhookId": "b0128b01-72f7-4948-8e0b-17627ee84ddd",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract case ID from channel name (updated for new format)\nconst slackEventData = $('Parse Slack Event').item.json;\nconst channelInfo = $json;\n\nconst channelName = channelInfo.name || '';\nlet catchyCaseId = null;\n\nif (channelName) {\n  // New format: tf-00147-client-keywords\n  // Match: starts with tf-, followed by digits\n  const match = channelName.match(/^tf-(\\d+)/);\n  if (match) {\n    const caseNumber = match[1];\n    // Reconstruct the full catchy_case_id from the channel name\n    catchyCaseId = 'TF-' + caseNumber.padStart(5, '0');\n  }\n}\n\nreturn {\n  json: {\n    ...slackEventData,\n    channelName: channelName,\n    catchyCaseId: catchyCaseId,\n    hasValidCase: catchyCaseId !== null\n  }\n};\n"
+      },
+      "id": "4b294a57-41d4-4b22-93e6-7c3b08e9d93b",
+      "name": "Extract Case ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-case-id",
+              "leftValue": "={{ $json.hasValidCase }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9923f52-4c09-4e91-b795-fe77e940a21a",
+      "name": "Has Valid Case?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Build error message for non-case channel\nconst channelName = $json.channelName || 'this channel';\n\nreturn {\n  json: {\n    channel: $json.channelId,\n    thread_ts: $json.threadTs,\n    text: `⚠️ I can only update briefs in case-specific channels (format: client-keywords-tf-c00123).\\n\\nThis channel (${channelName}) doesn't appear to be a case channel. Please @ mention me in the correct case channel.`,\n    isError: true\n  }\n};"
+      },
+      "id": "28326658-c7d2-48f1-b0a7-192ae385503d",
+      "name": "Build Error Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Extract Case ID').item.json.channelId }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "5dd07762-d366-4931-b0f8-d873a97b80d5",
+      "name": "Post Error Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2368,
+        -368
+      ],
+      "webhookId": "72e977f1-542b-4c98-8782-84776b8e74d2",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skipProcessing }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3cec59c-dbc6-4bf6-bb6a-e7f200d00b59",
+      "name": "Should Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -672,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Get or create conversation state (always returns data)\nWITH upsert AS (\n  INSERT INTO tf_bot_conversations (\n    slack_user_id,\n    slack_channel_id,\n    thread_ts,\n    case_id,\n    state,\n    context\n  )\n  SELECT \n    $1,\n    $2,\n    $3,\n    c.id,\n    'active',\n    jsonb_build_object(\n      'catchy_case_id', c.catchy_case_id,\n      'awaiting_field', null,\n      'awaiting_value', null,\n      'pending_updates', '[]'::jsonb,\n      'confirmation_message_ts', null\n    )\n  FROM tf_cases c\n  WHERE UPPER(c.catchy_case_id) LIKE UPPER($4) || '%'\n  ON CONFLICT (slack_channel_id, thread_ts) \n  DO UPDATE SET\n    updated_at = NOW()\n  RETURNING *\n)\nSELECT \n  id as conversation_id,\n  case_id,\n  state,\n  context,\n  created_at\nFROM upsert;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Extract Case ID').item.json.userId,\n  $('Extract Case ID').item.json.channelId,\n  $('Extract Case ID').item.json.threadTs,\n  $('Extract Case ID').item.json.catchyCaseId\n] }}"
+        }
+      },
+      "id": "dfa60582-2d13-4afe-a973-576469d0ed5c",
+      "name": "Get/Create Conversation State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        304,
+        -176
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Find case by catchy_case_id (pattern match for partial ID)\nSELECT \n  c.id as case_id,\n  c.case_number,\n  c.catchy_case_id,\n  c.case_title,\n  b.id as brief_id,\n  b.session_id,\n  b.analysis,\n  b.client,\n  b.brand,\n  b.budget_raw,\n  b.submission_deadline,\n  b.keywords,\n  b.territory,\n  b.media\nFROM tf_cases c\nLEFT JOIN tf_briefs b ON b.case_id = c.id\nWHERE UPPER(c.catchy_case_id) LIKE UPPER($1) || '%'\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ $json.catchyCaseId }}"
+        }
+      },
+      "id": "a18afa9b-906a-467a-b505-ceb5436acc35",
+      "name": "Find Case",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        144,
+        -176
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// AI-powered intent parser with multi-field and conversational support\nconst messageText = $('Parse Slack Event').item.json.messageText || '';\nconst conversationState = $('Get/Create Conversation State').item.json || {};\nconst context = conversationState.context || {};\nconst caseData = $('Find Case').item.json || {};\n\n// Check if we're in a conversation waiting for a value\nconst awaitingField = context.awaiting_field;\nconst awaitingValue = context.awaiting_value;\n\n// Extract fields from analysis JSONB object\nconst analysis = caseData.analysis || {};\nconst businessBrief = analysis.business_brief || {};\nconst creativeBrief = analysis.creative_brief || {};\nconst deliverables = analysis.deliverables || {};\n\n// Build comprehensive context for AI with ALL fields\nconst currentBriefInfo = {\n  // Top-level fields (also in business_brief)\n  client: caseData.client || businessBrief.client,\n  brand: caseData.brand || businessBrief.brand,\n  budget: caseData.budget_raw || businessBrief.budget,\n  territory: caseData.territory || businessBrief.territory,\n  media: caseData.media || businessBrief.media,\n  \n  // Business brief fields\n  agency: businessBrief.agency,\n  term: businessBrief.term,\n  cutdowns: businessBrief.cutdowns,\n  lengths: businessBrief.lengths,\n  extras: businessBrief.extras,\n  \n  // Creative brief fields\n  keywords: caseData.keywords || creativeBrief.keywords,\n  mood: creativeBrief.mood,\n  genres: creativeBrief.genres,\n  instruments: creativeBrief.instruments,\n  \n  // Deliverable dates\n  deadline: caseData.submission_deadline || deliverables.submission_deadline,\n  ppm_date: deliverables.ppm_date,\n  shoot_date: deliverables.shoot_date,\n  air_date: deliverables.air_date,\n  offline_date: deliverables.offline_date,\n  online_date: deliverables.online_date\n};\n\n// Determine interaction type\nlet interactionType = 'initial';\nif (awaitingField) {\n  interactionType = 'response_to_question';\n} else if (messageText.toLowerCase().includes('update') || \n           messageText.includes(':') || \n           messageText.match(/budget|deadline|client|brand|territory|media|keywords|cutdowns|lengths|agency|term|mood|genres|instruments|extras|ppm|shoot|air/i)) {\n  interactionType = 'direct_update';\n}\n\nreturn {\n  json: {\n    messageText: messageText,\n    interactionType: interactionType,\n    awaitingField: awaitingField,\n    conversationId: conversationState.conversation_id,\n    caseId: conversationState.case_id,\n    context: context,\n    currentBriefInfo: currentBriefInfo,\n    needsAiParsing: true\n  }\n};"
+      },
+      "id": "b5ce3317-9608-4f52-957a-b955a29f3a17",
+      "name": "Prepare AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "system-prompt",
+              "name": "systemPrompt",
+              "value": "=You are a briefing assistant that helps users update project brief information.\n\nYour task is to parse user messages and extract update intentions.\n\n**Current Brief Information:**\n{{ JSON.stringify($json.currentBriefInfo, null, 2) }}\n\n**Interaction Type:** {{ $json.interactionType }}\n{{ $json.awaitingField ? '**Awaiting Response For:** ' + $json.awaitingField : '' }}\n\n**Field Definitions:**\n- budget: monetary value (convert k/m to numbers)\n- deadline/submission_deadline: ISO date (YYYY-MM-DD)\n- ppm_date, shoot_date, air_date: ISO dates\n- client: client/company name\n- brand: brand name\n- territory: array of countries/regions\n- media: array of media types\n- keywords: array of keywords\n- mood: descriptive mood text\n- note: general note/comment\n\n**Your Response Format (JSON only):**\n{\n  \"interaction_type\": \"direct_update|needs_clarification|conversational_response|multi_field_update\",\n  \"updates\": [\n    {\n      \"field\": \"field_name\",\n      \"value\": \"parsed_value\",\n      \"original_text\": \"user's text for this field\",\n      \"confidence\": 0.0-1.0,\n      \"needs_confirmation\": true|false,\n      \"suggested_alternatives\": [\"alt1\", \"alt2\"] // optional\n    }\n  ],\n  \"clarification_needed\": {\n    \"field\": \"field_name\",\n    \"question\": \"What question to ask user?\",\n    \"suggestions\": [\"option1\", \"option2\"]\n  },\n  \"summary\": \"Human-readable summary of changes\"\n}\n\n**Examples:**\n\nInput: \"update budget to 50k\"\nOutput: {\"interaction_type\":\"direct_update\",\"updates\":[{\"field\":\"budget\",\"value\":\"50000\",\"original_text\":\"50k\",\"confidence\":0.95,\"needs_confirmation\":false}],\"summary\":\"Update budget to $50,000\"}\n\nInput: \"budget 75k, deadline Dec 15, territory UK and Germany\"\nOutput: {\"interaction_type\":\"multi_field_update\",\"updates\":[{\"field\":\"budget\",\"value\":\"75000\",\"confidence\":0.9,\"needs_confirmation\":false},{\"field\":\"deadline\",\"value\":\"2024-12-15\",\"confidence\":0.8,\"needs_confirmation\":true},{\"field\":\"territory\",\"value\":[\"UK\",\"Germany\"],\"confidence\":0.95,\"needs_confirmation\":false}],\"summary\":\"Update 3 fields: budget, deadline, and territory\"}\n\nInput: \"I think we need to push it out\"\nOutput: {\"interaction_type\":\"needs_clarification\",\"clarification_needed\":{\"field\":\"deadline\",\"question\":\"When would you like to push the deadline to?\",\"suggestions\":[\"Next week\",\"End of month\",\"Specific date\"]},\"summary\":\"User wants to extend deadline but needs to specify when\"}\n\nInput: \"end of month\" (when awaiting deadline)\nOutput: {\"interaction_type\":\"conversational_response\",\"updates\":[{\"field\":\"deadline\",\"value\":\"2024-12-31\",\"confidence\":0.85,\"needs_confirmation\":true,\"suggested_alternatives\":[\"2024-12-30\",\"2025-01-02\"]}],\"summary\":\"Interpreted 'end of month' as December 31, 2024\"}\n\n**Important:**\n- Always return valid JSON\n- Set needs_confirmation:true for ambiguous dates or large budget changes\n- For conversational responses, use context to determine intent\n- Return empty updates array if message is just acknowledgment/thanks\n- Confidence < 0.7 should trigger needs_confirmation\n",
+              "type": "string"
+            },
+            {
+              "id": "user-message",
+              "name": "userMessage",
+              "value": "={{ $json.messageText }}",
+              "type": "string"
+            }
+          ],
+          "assignments[0]": {
+            "value": "=You are a briefing assistant that helps users update project brief information.\n\nYour task is to parse user messages and extract update intentions.\n\n**Current Brief Information:**\n{{ JSON.stringify($json.currentBriefInfo, null, 2) }}\n\n**Interaction Type:** {{ $json.interactionType }}\n{{ $json.awaitingField ? '**Awaiting Response For:** ' + $json.awaitingField : '' }}\n\n**Field Definitions:**\n- budget: monetary value (convert k/m to numbers)\n- client: client/company name\n- brand: brand name\n- agency: agency name\n- term: campaign duration/length/period - NOT a date (e.g., \"1 year\", \"6 months\", \"perpetual\")\n- territory: array of countries/regions (e.g., [\"UK\", \"Germany\", \"EMEA\"])\n- media: array of media types (e.g., [\"TV\", \"Digital\", \"Radio\"])\n- cutdowns: array of cutdown lengths (e.g., [\"15s\", \"30s\", \"60s\"])\n- lengths: array of track lengths (e.g., [\"30s\", \"60s\", \"90s\"])\n- extras: additional requirements or extras (text)\n- keywords: array of creative keywords (e.g., [\"upbeat\", \"energetic\", \"positive\"])\n- mood: descriptive mood text (e.g., \"energetic\", \"calm\", \"mysterious\")\n- genres: array of music genres (e.g., [\"Electronic\", \"Pop\", \"Rock\"])\n- instruments: array of instruments (e.g., [\"Guitar\", \"Piano\", \"Drums\"])\n- deadline/submission_deadline: date to submit music (YYYY-MM-DD)\n- ppm_date: pre-production meeting date (YYYY-MM-DD)\n- shoot_date: filming/shoot date (YYYY-MM-DD)\n- air_date: launch/air/release date (YYYY-MM-DD)\n- offline_date: offline date (YYYY-MM-DD)\n- online_date: online date (YYYY-MM-DD)\n- note: general note/comment to append\n\n**Critical Distinctions:**\n- \"term\" = campaign LENGTH/DURATION (e.g., \"1 year\", \"6 months\", \"perpetual\")\n- \"submission_deadline\" = specific DATE when music is due (YYYY-MM-DD)\n- \"cutdowns\" = shortened versions of tracks (e.g., \"15s, 30s, 60s\")\n- \"lengths\" = full track lengths needed (e.g., \"30s, 60s, 90s\")\n- If user mentions \"campaign length\", \"duration\", \"usage period\" → use \"term\"\n- If user mentions \"deadline\", \"due date\", \"submit by\" → use \"submission_deadline\"\n- If user mentions \"cutdowns\" or \"cuts\" → use \"cutdowns\" field\n\n**Your Response Format (JSON only):**\n{\n  \"interaction_type\": \"direct_update|needs_clarification|conversational_response|multi_field_update\",\n  \"updates\": [\n    {\n      \"field\": \"field_name\",\n      \"value\": \"parsed_value\",\n      \"original_text\": \"user's text for this field\",\n      \"confidence\": 0.0-1.0,\n      \"needs_confirmation\": true|false,\n      \"suggested_alternatives\": [\"alt1\", \"alt2\"] // optional\n    }\n  ],\n  \"clarification_needed\": {\n    \"field\": \"field_name\",\n    \"question\": \"What question to ask user?\",\n    \"suggestions\": [\"option1\", \"option2\"]\n  },\n  \"summary\": \"Human-readable summary of changes\"\n}\n\n**Examples:**\n\nInput: \"update budget to 50k\"\nOutput: {\"interaction_type\":\"direct_update\",\"updates\":[{\"field\":\"budget\",\"value\":\"50000\",\"original_text\":\"50k\",\"confidence\":0.95,\"needs_confirmation\":false}],\"summary\":\"Update budget to $50,000\"}\n\nInput: \"update the cutdowns to be 15s, 30s, 60s\"\nOutput: {\"interaction_type\":\"direct_update\",\"updates\":[{\"field\":\"cutdowns\",\"value\":[\"15s\",\"30s\",\"60s\"],\"original_text\":\"15s, 30s, 60s\",\"confidence\":0.95,\"needs_confirmation\":false}],\"summary\":\"Update cutdowns to 15s, 30s, 60s\"}\n\nInput: \"budget 75k, deadline Dec 15, territory UK and Germany\"\nOutput: {\"interaction_type\":\"multi_field_update\",\"updates\":[{\"field\":\"budget\",\"value\":\"75000\",\"confidence\":0.9,\"needs_confirmation\":false},{\"field\":\"deadline\",\"value\":\"2024-12-15\",\"confidence\":0.8,\"needs_confirmation\":true},{\"field\":\"territory\",\"value\":[\"UK\",\"Germany\"],\"confidence\":0.95,\"needs_confirmation\":false}],\"summary\":\"Update 3 fields: budget, deadline, and territory\"}\n\nInput: \"I think we need to push it out\"\nOutput: {\"interaction_type\":\"needs_clarification\",\"clarification_needed\":{\"field\":\"deadline\",\"question\":\"When would you like to push the deadline to?\",\"suggestions\":[\"Next week\",\"End of month\",\"Specific date\"]},\"summary\":\"User wants to extend deadline but needs to specify when\"}\n\nInput: \"end of month\" (when awaiting deadline)\nOutput: {\"interaction_type\":\"conversational_response\",\"updates\":[{\"field\":\"deadline\",\"value\":\"2024-12-31\",\"confidence\":0.85,\"needs_confirmation\":true,\"suggested_alternatives\":[\"2024-12-30\",\"2025-01-02\"]}],\"summary\":\"Interpreted 'end of month' as December 31, 2024\"}\n\n**Important:**\n- Always return valid JSON\n- Set needs_confirmation:true for ambiguous dates or large budget changes\n- For conversational responses, use context to determine intent\n- Return empty updates array if message is just acknowledgment/thanks\n- Confidence < 0.7 should trigger needs_confirmation\n"
+          }
+        },
+        "options": {}
+      },
+      "id": "597cf72b-c10a-409b-a39e-501ee0b64390",
+      "name": "Build AI Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "99d07dcc-e295-4fd8-8947-f714ebbb665a",
+      "name": "Groq Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        976,
+        336
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "PpKC9FAWHuKWALgs",
+          "name": "Groq Creds"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.userMessage }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "={{ $('Build AI Prompt').item.json.systemPrompt }}"
+        }
+      },
+      "id": "ea213843-0059-4f87-80bd-b41e266bc52c",
+      "name": "AI Intent Parser",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        896,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response - handles multiple JSON blocks\nlet aiResponse = $json;\n\n// Helper function to clean markdown code blocks\nfunction cleanMarkdown(text) {\n  if (typeof text !== 'string') return text;\n  return text.replace(/```json\\s*|```\\s*/g, '').trim();\n}\n\n// Helper function to extract the last JSON code block\nfunction extractLastJsonBlock(text) {\n  if (typeof text !== 'string') return null;\n  \n  // Find all ```json ... ``` blocks\n  const jsonBlockRegex = /```json\\s*([\\s\\S]*?)```/g;\n  const blocks = [];\n  let match;\n  \n  while ((match = jsonBlockRegex.exec(text)) !== null) {\n    blocks.push(match[1].trim());\n  }\n  \n  // Return the last block (which should contain the actual response)\n  if (blocks.length > 0) {\n    return blocks[blocks.length - 1];\n  }\n  \n  return null;\n}\n\n// Helper function to find JSON with specific keys\nfunction findJsonWithKeys(text, requiredKeys) {\n  if (typeof text !== 'string') return null;\n  \n  // Try to find JSON objects that contain our required keys\n  const jsonPattern = /\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}/g;\n  const matches = text.match(jsonPattern) || [];\n  \n  for (let i = matches.length - 1; i >= 0; i--) {\n    try {\n      const parsed = JSON.parse(matches[i]);\n      const hasKeys = requiredKeys.some(key => key in parsed);\n      if (hasKeys) {\n        return parsed;\n      }\n    } catch (e) {\n      // Continue to next match\n    }\n  }\n  \n  return null;\n}\n\n// Handle different response formats\nlet parsedResponse;\nlet textToParse = '';\n\nif (typeof aiResponse === 'string') {\n  textToParse = aiResponse;\n} else if (aiResponse.output) {\n  textToParse = typeof aiResponse.output === 'string' ? aiResponse.output : JSON.stringify(aiResponse.output);\n} else {\n  parsedResponse = aiResponse;\n}\n\nif (textToParse && !parsedResponse) {\n  try {\n    // Strategy 1: Try to extract the last JSON code block\n    const lastBlock = extractLastJsonBlock(textToParse);\n    if (lastBlock) {\n      parsedResponse = JSON.parse(lastBlock);\n    }\n    \n    // Strategy 2: If no code blocks, look for JSON with our expected keys\n    if (!parsedResponse) {\n      parsedResponse = findJsonWithKeys(textToParse, ['interaction_type', 'updates', 'clarification_needed']);\n    }\n    \n    // Strategy 3: Clean markdown and try direct parse\n    if (!parsedResponse) {\n      const cleaned = cleanMarkdown(textToParse);\n      parsedResponse = JSON.parse(cleaned);\n    }\n  } catch (e) {\n    // Strategy 4: Last resort - find any JSON object\n    const jsonMatch = textToParse.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      try {\n        parsedResponse = JSON.parse(jsonMatch[0]);\n      } catch (e2) {\n        throw new Error('Failed to parse AI response as JSON: ' + e.message);\n      }\n    } else {\n      throw new Error('No JSON found in AI response');\n    }\n  }\n}\n\nconst contextData = $('Prepare AI Context').item.json;\n\nreturn {\n  json: {\n    aiParsedIntent: parsedResponse,\n    interactionType: parsedResponse.interaction_type || 'unknown',\n    updates: parsedResponse.updates || [],\n    clarificationNeeded: parsedResponse.clarification_needed || null,\n    summary: parsedResponse.summary || '',\n    needsConfirmation: (parsedResponse.updates || []).some(u => u.needs_confirmation),\n    conversationId: contextData.conversationId,\n    caseId: contextData.caseId,\n    context: contextData.context\n  }\n};"
+      },
+      "id": "31fc5452-ac1b-4c01-945c-ab24c8eb4731",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Build confirmation message for smart suggestions\nconst parsedData = $json;\nconst updates = parsedData.updates || [];\nconst summary = parsedData.summary;\n\n// Build formatted message with Block Kit\nconst blocks = [\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `🤔 *Let me confirm these changes:*\\n\\n${summary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  }\n];\n\n// Add each update with details\nupdates.forEach((update, index) => {\n  let valueDisplay = update.value;\n  if (Array.isArray(update.value)) {\n    valueDisplay = update.value.join(', ');\n  }\n  \n  let confidenceEmoji = '✅';\n  if (update.confidence < 0.9) confidenceEmoji = '⚠️';\n  if (update.confidence < 0.7) confidenceEmoji = '❓';\n  \n  let fieldText = `${confidenceEmoji} *${update.field}*: ${valueDisplay}`;\n  \n  if (update.confidence < 0.9) {\n    fieldText += `\\n_Confidence: ${Math.round(update.confidence * 100)}%_`;\n  }\n  \n  if (update.suggested_alternatives && update.suggested_alternatives.length > 0) {\n    fieldText += `\\n_Alternatives: ${update.suggested_alternatives.join(', ')}_`;\n  }\n  \n  blocks.push({\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": fieldText\n    }\n  });\n});\n\n// Add confirmation instruction\nblocks.push(\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"context\",\n    \"elements\": [\n      {\n        \"type\": \"mrkdwn\",\n        \"text\": \"React with ✅ to confirm or ❌ to cancel these changes\"\n      }\n    ]\n  }\n);\n\nreturn {\n  json: {\n    channel: $('Parse Slack Event').item.json.channelId,\n    thread_ts: $('Parse Slack Event').item.json.threadTs,\n    text: `Confirmation needed: ${summary}`,\n    blocks: JSON.stringify(blocks),\n    parsedData: parsedData\n  }\n};"
+      },
+      "id": "cbef38ac-5f26-4cc0-9abe-47ec669222ee",
+      "name": "Build Confirmation Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Extract Case ID').item.json.channelId }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "d51d3df4-5a6e-42e5-8838-0db666e78525",
+      "name": "Slack: Post Confirmation",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2144,
+        -176
+      ],
+      "webhookId": "977c675e-7c3b-4601-8b92-4b04ece86b04",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Store pending confirmation in conversation state\nUPDATE tf_bot_conversations\nSET \n  context = jsonb_set(\n    jsonb_set(\n      context,\n      '{pending_updates}',\n      $1::jsonb\n    ),\n    '{confirmation_message_ts}',\n    to_jsonb($2::text)\n  ),\n  state = 'awaiting_confirmation',\n  updated_at = NOW()\nWHERE id = $3::uuid\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [\n  JSON.stringify($('Parse AI Response').item.json.updates),\n  $json.ts,\n  $('Parse AI Response').item.json.conversationId\n] }}"
+        }
+      },
+      "id": "69a471f1-db38-42e7-8739-2dbaa0108422",
+      "name": "Save Pending Confirmation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2368,
+        -192
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Build database update query from AI-parsed updates\nconst parsedData = $json;\nconst updates = parsedData.updates || [];\nconst caseData = $('Find Case').item.json;\nconst briefId = caseData.brief_id;\nconst caseId = caseData.case_id;\n\n// Get current analysis\nconst currentAnalysis = caseData.analysis || {};\n\n// Map update fields to database structure\nconst fieldMapping = {\n  // Business brief fields\n  budget: { column: 'budget_raw', jsonPath: 'business_brief.budget' },\n  client: { column: 'client', jsonPath: 'business_brief.client' },\n  brand: { column: 'brand', jsonPath: 'business_brief.brand' },\n  agency: { column: 'agency', jsonPath: 'business_brief.agency' },\n  term: { column: 'term', jsonPath: 'business_brief.term' },\n  territory: { column: 'territory', jsonPath: 'business_brief.territory', isArray: true },\n  media: { column: 'media', jsonPath: 'business_brief.media', isArray: true },\n  cutdowns: { column: 'cutdowns', jsonPath: 'business_brief.cutdowns', isArray: true },\n  lengths: { column: 'lengths', jsonPath: 'business_brief.lengths', isArray: true },\n  extras: { column: 'extras', jsonPath: 'business_brief.extras' },\n  \n  // Creative brief fields\n  keywords: { column: 'keywords', jsonPath: 'creative_brief.keywords', isArray: true },\n  mood: { column: 'mood', jsonPath: 'creative_brief.mood' },\n  genres: { column: 'genres', jsonPath: 'creative_brief.genres', isArray: true },\n  instruments: { column: 'instruments', jsonPath: 'creative_brief.instruments', isArray: true },\n  \n  // Deliverable dates\n  deadline: { column: 'submission_deadline', jsonPath: 'deliverables.submission_deadline' },\n  submission_deadline: { column: 'submission_deadline', jsonPath: 'deliverables.submission_deadline' },\n  ppm_date: { column: 'ppm_date', jsonPath: 'deliverables.ppm_date' },\n  shoot_date: { column: 'shoot_date', jsonPath: 'deliverables.shoot_date' },\n  air_date: { column: 'air_date', jsonPath: 'deliverables.air_date' },\n  offline_date: { column: 'offline_date', jsonPath: 'deliverables.offline_date' },\n  online_date: { column: 'online_date', jsonPath: 'deliverables.online_date' },\n  \n  // Notes\n  note: { jsonPath: 'extraction_notes', isNote: true }\n};\n\n// Deep clone analysis\nconst updatedAnalysis = JSON.parse(JSON.stringify(currentAnalysis));\nconst changesLog = [];\n\n// Apply each update\nupdates.forEach(update => {\n  const field = update.field;\n  const value = update.value;\n  const mapping = fieldMapping[field];\n  \n  if (!mapping) {\n    console.warn(`Unknown field: ${field}`);\n    return;\n  }\n  \n  // Handle notes specially\n  if (mapping.isNote) {\n    if (!updatedAnalysis.extraction_notes) {\n      updatedAnalysis.extraction_notes = '';\n    }\n    const timestamp = new Date().toISOString();\n    updatedAnalysis.extraction_notes += `\\n[${timestamp}] ${value}`;\n    changesLog.push({ field: 'note', value: value });\n    return;\n  }\n  \n  // Navigate to the correct nested object\n  const pathParts = mapping.jsonPath.split('.');\n  let target = updatedAnalysis;\n  \n  for (let i = 0; i < pathParts.length - 1; i++) {\n    if (!target[pathParts[i]]) {\n      target[pathParts[i]] = {};\n    }\n    target = target[pathParts[i]];\n  }\n  \n  // Set the value\n  const finalKey = pathParts[pathParts.length - 1];\n  const oldValue = target[finalKey];\n  \n  if (mapping.isArray) {\n    target[finalKey] = Array.isArray(value) ? value : value.split(',').map(v => v.trim());\n  } else {\n    target[finalKey] = value;\n  }\n  \n  changesLog.push({\n    field: field,\n    oldValue: oldValue,\n    newValue: target[finalKey]\n  });\n});\n\n// Add update note to extraction_notes\nif (!updatedAnalysis.extraction_notes) {\n  updatedAnalysis.extraction_notes = '';\n}\nconst timestamp = new Date().toISOString();\nconst updateSummary = parsedData.summary || `Updated ${updates.length} field(s)`;\nconst updateNote = `\\n[${timestamp}] Slack bot update: ${updateSummary}`;\nupdatedAnalysis.extraction_notes += updateNote;\n\nreturn {\n  json: {\n    briefId: briefId,\n    caseId: caseId,\n    updatedAnalysis: updatedAnalysis,\n    updates: updates,\n    changesLog: changesLog,\n    updateSummary: updateSummary,\n    updateCount: updates.length\n  }\n};"
+      },
+      "id": "fd05ffda-3de1-4a2c-a0a9-eba3f5a8b6f3",
+      "name": "Build Update Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Update brief with new information (enhanced for multi-field)\nWITH updated_brief AS (\n  UPDATE tf_briefs\n  SET \n    analysis = $1::jsonb,\n    -- Update individual columns from business_brief\n    budget_raw = COALESCE(\n      $1::jsonb->'business_brief'->>'budget',\n      budget_raw\n    ),\n    client = COALESCE(\n      $1::jsonb->'business_brief'->>'client',\n      client\n    ),\n    brand = COALESCE(\n      $1::jsonb->'business_brief'->>'brand',\n      brand\n    ),\n    agency = COALESCE(\n      $1::jsonb->'business_brief'->>'agency',\n      agency\n    ),\n    term = COALESCE(\n      $1::jsonb->'business_brief'->>'term',\n      term\n    ),\n    territory = CASE \n      WHEN jsonb_typeof($1::jsonb->'business_brief'->'territory') = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'business_brief'->'territory'))\n      ELSE territory\n    END,\n    media = CASE \n      WHEN jsonb_typeof($1::jsonb->'business_brief'->'media') = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'business_brief'->'media'))\n      ELSE media\n    END,\n    cutdowns = CASE \n      WHEN jsonb_typeof($1::jsonb->'business_brief'->'cutdowns') = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'business_brief'->'cutdowns'))\n      ELSE cutdowns\n    END,\n    lengths = CASE \n      WHEN jsonb_typeof($1::jsonb->'business_brief'->'lengths') = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'business_brief'->'lengths'))\n      ELSE lengths\n    END,\n    extras = COALESCE(\n      $1::jsonb->'business_brief'->>'extras',\n      extras\n    ),\n    -- Update individual columns from creative_brief\n    keywords = CASE \n      WHEN jsonb_typeof($1::jsonb->'creative_brief'->'keywords') = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'creative_brief'->'keywords'))\n      ELSE keywords\n    END,\n    genres = CASE \n      WHEN jsonb_typeof($1::jsonb->'creative_brief'->'genres') = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'creative_brief'->'genres'))\n      ELSE genres\n    END,\n    instruments = CASE \n      WHEN jsonb_typeof($1::jsonb->'creative_brief'->'instruments') = 'array'\n      THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'creative_brief'->'instruments'))\n      ELSE instruments\n    END,\n    mood = COALESCE(\n      $1::jsonb->'creative_brief'->>'mood',\n      mood\n    ),\n    -- Update individual columns from deliverables\n    submission_deadline = CASE \n      WHEN $1::jsonb->'deliverables'->>'submission_deadline' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n      THEN ($1::jsonb->'deliverables'->>'submission_deadline')::timestamp\n      ELSE submission_deadline\n    END,\n    ppm_date = CASE \n      WHEN $1::jsonb->'deliverables'->>'ppm_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n      THEN ($1::jsonb->'deliverables'->>'ppm_date')::timestamp\n      ELSE ppm_date\n    END,\n    shoot_date = CASE \n      WHEN $1::jsonb->'deliverables'->>'shoot_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n      THEN ($1::jsonb->'deliverables'->>'shoot_date')::timestamp\n      ELSE shoot_date\n    END,\n    air_date = CASE \n      WHEN $1::jsonb->'deliverables'->>'air_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n      THEN ($1::jsonb->'deliverables'->>'air_date')::timestamp\n      ELSE air_date\n    END,\n    offline_date = CASE \n      WHEN $1::jsonb->'deliverables'->>'offline_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n      THEN ($1::jsonb->'deliverables'->>'offline_date')::timestamp\n      ELSE offline_date\n    END,\n    online_date = CASE \n      WHEN $1::jsonb->'deliverables'->>'online_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n      THEN ($1::jsonb->'deliverables'->>'online_date')::timestamp\n      ELSE online_date\n    END,\n    version = version + 1,\n    updated_at = NOW()\n  WHERE id = $2::uuid\n  RETURNING *\n)\nSELECT \n  ub.*,\n  c.case_number,\n  c.catchy_case_id,\n  c.case_title\nFROM updated_brief ub\nJOIN tf_cases c ON c.id = ub.case_id;",
+        "options": {
+          "queryReplacement": "={{ [\n  JSON.stringify($('Build Update Query').item.json.updatedAnalysis),\n  $('Build Update Query').item.json.briefId\n] }}"
+        }
+      },
+      "id": "4b1814b7-c0ff-4583-bb50-2cf4983f4c42",
+      "name": "Update Brief in DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1920,
+        208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Log the update activity with change details\nINSERT INTO tf_case_activity (\n  case_id,\n  activity_type,\n  activity_description,\n  user_id,\n  source,\n  changes\n)\nVALUES (\n  $1::uuid,\n  'brief_updated',\n  $2,\n  (SELECT id FROM tf_users WHERE email = 'slack-bot@tracksandfields.com' LIMIT 1),\n  'slack',\n  $3::jsonb\n)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Build Update Query').item.json.caseId,\n  'Brief updated via Slack bot: ' + $('Build Update Query').item.json.updateSummary,\n  JSON.stringify({\n    slack_user: $('Parse Slack Event').item.json.userId,\n    slack_channel: $('Parse Slack Event').item.json.channelId,\n    thread_ts: $('Parse Slack Event').item.json.threadTs,\n    updates: $('Build Update Query').item.json.updates,\n    changes_log: $('Build Update Query').item.json.changesLog,\n    original_message: $('Parse Slack Event').item.json.messageText,\n    ai_summary: $('Build Update Query').item.json.updateSummary\n  })\n] }}"
+        }
+      },
+      "id": "c9e3fe59-5158-4582-b566-63d41da12ff0",
+      "name": "Log Update Activity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2144,
+        208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Build rich success response\nconst updateData = $('Build Update Query').item.json;\nconst dbResult = $('Update Brief in DB').item.json;\nconst changesLog = updateData.changesLog || [];\nconst updateCount = updateData.updateCount || 0;\n\n// Build formatted blocks\nconst blocks = [\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `✅ *Successfully updated ${updateCount} field${updateCount !== 1 ? 's' : ''}*\\n\\n${updateData.updateSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  }\n];\n\n// Add change details\nif (changesLog.length > 0) {\n  const changesList = changesLog.map(change => {\n    let changeText = `• *${change.field}*`;\n    if (change.oldValue !== undefined && change.oldValue !== null) {\n      changeText += `\\n  _Before:_ ${formatValue(change.oldValue)}`;\n    }\n    changeText += `\\n  _After:_ ${formatValue(change.newValue)}`;\n    return changeText;\n  }).join('\\n\\n');\n  \n  blocks.push({\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*Changes Made:*\\n${changesList}`\n    }\n  });\n}\n\n// Add footer with version\nblocks.push(\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"context\",\n    \"elements\": [\n      {\n        \"type\": \"mrkdwn\",\n        \"text\": `Updated brief version: v${dbResult.version} | Case: ${dbResult.catchy_case_id}`\n      }\n    ]\n  }\n);\n\nfunction formatValue(value) {\n  if (Array.isArray(value)) {\n    return value.join(', ');\n  }\n  if (value === null || value === undefined) {\n    return '_not set_';\n  }\n  return String(value);\n}\n\nreturn {\n  json: {\n    channel: $('Parse Slack Event').item.json.channelId,\n    thread_ts: $('Parse Slack Event').item.json.threadTs,\n    text: `✅ Updated ${updateCount} field(s) successfully`,\n    blocks: JSON.stringify(blocks)\n  }\n};"
+      },
+      "id": "9a9195e9-a048-429a-ab3c-b3216e77836f",
+      "name": "Build Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $('Extract Case ID').item.json.channelId }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "10db9981-b594-44e7-a0aa-97b5e56de761",
+      "name": "Slack: Post Success",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2368,
+        16
+      ],
+      "webhookId": "68ecd342-9eb0-4c14-ae77-f67eb18b8242",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Clear conversation state after successful update\nUPDATE tf_bot_conversations\nSET \n  state = 'active',\n  context = jsonb_set(\n    jsonb_set(\n      context,\n      '{pending_updates}',\n      '[]'::jsonb\n    ),\n    '{awaiting_field}',\n    'null'::jsonb\n  ),\n  updated_at = NOW()\nWHERE id = $1::uuid\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [$('Parse AI Response').item.json.conversationId] }}"
+        }
+      },
+      "id": "b051dac0-36e7-4d92-bf15-721a06be2dc7",
+      "name": "Clear Conversation State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2368,
+        208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2592,
+        16
+      ],
+      "id": "544f1987-6ff4-4828-b55a-801ba0292dc7",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('Parse Slack Event').item.json.isChallenge ? JSON.stringify({ challenge: $('Parse Slack Event').item.json.challenge }) : JSON.stringify({ success: true }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -448,
+        -272
+      ],
+      "id": "8f87854d-a709-4d2f-90c0-f80ec0db6101",
+      "name": "Respond Challenge"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "xpnOcoHAwqtpm6d7",
+          "mode": "list",
+          "cachedResultName": "Sync Brief to Nextcloud"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "case_id": "={{ $('Find Case').item.json.case_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "case_id",
+              "displayName": "case_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "sync-brief-nextcloud-slack",
+      "name": "Trigger Sync to Nextcloud",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1936,
+        416
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Slack Mention": {
+      "main": [
+        [
+          {
+            "node": "Parse Slack Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Slack Event": {
+      "main": [
+        [
+          {
+            "node": "Should Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Skip?": {
+      "main": [
+        [
+          {
+            "node": "Respond Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Channel Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Case": {
+      "main": [
+        [
+          {
+            "node": "Get/Create Conversation State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get/Create Conversation State": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Context": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Intent Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Intent Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Intent Parser": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Confirmation Message": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Post Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Save Pending Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Pending Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Update Query": {
+      "main": [
+        [
+          {
+            "node": "Update Brief in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Brief in DB": {
+      "main": [
+        [
+          {
+            "node": "Log Update Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Success Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Sync to Nextcloud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Update Activity": {
+      "main": [
+        [
+          {
+            "node": "Clear Conversation State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Response": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Post Success": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Conversation State": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Channel Info": {
+      "main": [
+        [
+          {
+            "node": "Extract Case ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Case ID": {
+      "main": [
+        [
+          {
+            "node": "Has Valid Case?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Case?": {
+      "main": [
+        [
+          {
+            "node": "Find Case",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Error Message": {
+      "main": [
+        [
+          {
+            "node": "Post Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Error Message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Build Update Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "f7a61515-a3fb-49c6-8734-733de3ff48f8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "27d74fdf4a6138506ab2af8024f163764cffd6e3f1afe42b0b372c347eb2fa68"
+  },
+  "id": "rg3gklwz5xhghUsA",
+  "tags": []
+}

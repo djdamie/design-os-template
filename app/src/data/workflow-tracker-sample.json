@@ -1,0 +1,340 @@
+{
+  "_meta": {
+    "models": {
+      "workflowSteps": "Each step represents a milestone in the project workflow. Steps are organized in Kanban columns by status and vary by project type.",
+      "teamAssignments": "Team members assigned to this project with their roles. Each role owns specific workflow steps.",
+      "systemTasks": "Automated tasks triggered by n8n webhooks, displayed as generative UI cards showing real-time automation status.",
+      "alerts": "Notifications about items needing attention—overdue steps, approaching deadlines, or blocked work.",
+      "workflowTemplate": "The active workflow configuration based on project classification (A+B, C+D, E, or Production)."
+    },
+    "relationships": [
+      "Each WorkflowStep belongs to a Project and may be assigned to a TeamAssignment",
+      "TeamAssignments link team members to their roles on the project",
+      "SystemTasks track automated operations triggered during project lifecycle",
+      "Alerts are generated from WorkflowSteps that are overdue, approaching deadline, or blocked"
+    ]
+  },
+  "project": {
+    "id": "proj-2024-047",
+    "caseNumber": 47,
+    "caseTitle": "Lufthansa Summer Campaign",
+    "catchyCaseId": "LH-Summer-Vibes",
+    "classification": "C",
+    "budget": 18500,
+    "status": "in_progress"
+  },
+  "workflowTemplate": {
+    "type": "C+D",
+    "label": "Simplified Workflow",
+    "totalSteps": 11,
+    "description": "Request-first approach for projects €2,500–€25,000"
+  },
+  "workflowSteps": [
+    {
+      "id": "step-001",
+      "sequenceNumber": 1,
+      "name": "Define Briefing",
+      "description": "Structure the client brief",
+      "status": "completed",
+      "assignedRole": "AM",
+      "assignedUserId": "user-sarah",
+      "estimatedDuration": "1 hour",
+      "actualDuration": "45 min",
+      "startedAt": "2025-01-10T09:00:00Z",
+      "completedAt": "2025-01-10T09:45:00Z",
+      "notes": "Brief was well-structured from client. Minimal clarification needed."
+    },
+    {
+      "id": "step-002",
+      "sequenceNumber": 2,
+      "name": "Create Request",
+      "description": "Submit to internal request system",
+      "status": "completed",
+      "assignedRole": "AM",
+      "assignedUserId": "user-sarah",
+      "estimatedDuration": "1 hour",
+      "actualDuration": "30 min",
+      "startedAt": "2025-01-10T10:00:00Z",
+      "completedAt": "2025-01-10T10:30:00Z",
+      "notes": null
+    },
+    {
+      "id": "step-003",
+      "sequenceNumber": 3,
+      "name": "Shortlist Request",
+      "description": "Filter request responses",
+      "status": "completed",
+      "assignedRole": "MS",
+      "assignedUserId": "user-marcus",
+      "estimatedDuration": "1 day",
+      "actualDuration": "6 hours",
+      "startedAt": "2025-01-11T09:00:00Z",
+      "completedAt": "2025-01-11T15:00:00Z",
+      "notes": "Good response rate. 47 submissions, shortlisted to 12."
+    },
+    {
+      "id": "step-004",
+      "sequenceNumber": 4,
+      "name": "Additional Tracks Needed?",
+      "description": "Decide if more search required",
+      "status": "completed",
+      "assignedRole": "AM",
+      "assignedUserId": "user-sarah",
+      "estimatedDuration": "1 hour",
+      "actualDuration": "20 min",
+      "startedAt": "2025-01-11T15:30:00Z",
+      "completedAt": "2025-01-11T15:50:00Z",
+      "notes": "Yes - client mentioned they want more indie options"
+    },
+    {
+      "id": "step-005",
+      "sequenceNumber": 5,
+      "name": "Add Additional Tracks",
+      "description": "Expand search if needed",
+      "status": "completed",
+      "assignedRole": "MS",
+      "assignedUserId": "user-marcus",
+      "estimatedDuration": "2 hours",
+      "actualDuration": "2.5 hours",
+      "startedAt": "2025-01-12T09:00:00Z",
+      "completedAt": "2025-01-12T11:30:00Z",
+      "notes": "Added 8 indie tracks from our catalog + 3 from Musicbed"
+    },
+    {
+      "id": "step-006",
+      "sequenceNumber": 6,
+      "name": "List Safe & Good?",
+      "description": "Verify quality and clearability",
+      "status": "in_progress",
+      "assignedRole": "MS",
+      "assignedUserId": "user-marcus",
+      "estimatedDuration": "30 min",
+      "actualDuration": null,
+      "startedAt": "2025-01-13T10:00:00Z",
+      "completedAt": null,
+      "notes": "Checking 2 tracks with potential conflicts"
+    },
+    {
+      "id": "step-007",
+      "sequenceNumber": 7,
+      "name": "Check TBCs",
+      "description": "Verify 'to be confirmed' items",
+      "status": "blocked",
+      "assignedRole": "MS",
+      "assignedUserId": "user-marcus",
+      "estimatedDuration": "1 day",
+      "actualDuration": null,
+      "startedAt": "2025-01-13T14:00:00Z",
+      "completedAt": null,
+      "notes": null,
+      "blockedReason": "Waiting on publisher response for 'Golden Hour' sync availability. Follow-up sent Jan 14."
+    },
+    {
+      "id": "step-008",
+      "sequenceNumber": 8,
+      "name": "Send List to Client",
+      "description": "Deliver shortlist",
+      "status": "pending",
+      "assignedRole": "AM",
+      "assignedUserId": "user-sarah",
+      "estimatedDuration": "1 day",
+      "actualDuration": null,
+      "startedAt": null,
+      "completedAt": null,
+      "notes": null,
+      "dueDate": "2025-01-17T17:00:00Z"
+    },
+    {
+      "id": "step-009",
+      "sequenceNumber": 9,
+      "name": "Check List Engagement",
+      "description": "Monitor client response",
+      "status": "pending",
+      "assignedRole": "AM",
+      "assignedUserId": "user-sarah",
+      "estimatedDuration": "3 days",
+      "actualDuration": null,
+      "startedAt": null,
+      "completedAt": null,
+      "notes": null
+    },
+    {
+      "id": "step-010",
+      "sequenceNumber": 10,
+      "name": "Follow Up / Double Down",
+      "description": "Push for decision",
+      "status": "pending",
+      "assignedRole": "AM",
+      "assignedUserId": "user-sarah",
+      "estimatedDuration": "1 hour",
+      "actualDuration": null,
+      "startedAt": null,
+      "completedAt": null,
+      "notes": null
+    },
+    {
+      "id": "step-011",
+      "sequenceNumber": 11,
+      "name": "Make Contract",
+      "description": "Finalize agreement",
+      "status": "pending",
+      "assignedRole": "BA",
+      "assignedUserId": "user-elena",
+      "estimatedDuration": "Variable",
+      "actualDuration": null,
+      "startedAt": null,
+      "completedAt": null,
+      "notes": null
+    }
+  ],
+  "teamAssignments": [
+    {
+      "id": "assign-001",
+      "userId": "user-sarah",
+      "userName": "Sarah Chen",
+      "userAvatar": null,
+      "role": "AM",
+      "roleLabel": "Account Manager",
+      "isPrimary": true,
+      "stepsOwned": ["step-001", "step-002", "step-004", "step-008", "step-009", "step-010"],
+      "notes": "Project lead"
+    },
+    {
+      "id": "assign-002",
+      "userId": "user-marcus",
+      "userName": "Marcus Weber",
+      "userAvatar": null,
+      "role": "MS",
+      "roleLabel": "Music Supervisor",
+      "isPrimary": true,
+      "stepsOwned": ["step-003", "step-005", "step-006", "step-007"],
+      "notes": null
+    },
+    {
+      "id": "assign-003",
+      "userId": "user-elena",
+      "userName": "Elena Rodriguez",
+      "userAvatar": null,
+      "role": "BA",
+      "roleLabel": "Business Affairs",
+      "isPrimary": true,
+      "stepsOwned": ["step-011"],
+      "notes": "Available after Jan 20"
+    },
+    {
+      "id": "assign-004",
+      "userId": "user-thomas",
+      "userName": "Thomas Müller",
+      "userAvatar": null,
+      "role": "PM",
+      "roleLabel": "Project Manager",
+      "isPrimary": false,
+      "stepsOwned": [],
+      "notes": "Oversight only"
+    },
+    {
+      "id": "assign-005",
+      "userId": "user-anna",
+      "userName": "Anna Schmidt",
+      "userAvatar": null,
+      "role": "MGMT",
+      "roleLabel": "Management",
+      "isPrimary": false,
+      "stepsOwned": [],
+      "notes": "Final approval if needed"
+    }
+  ],
+  "systemTasks": [
+    {
+      "id": "sys-001",
+      "name": "Project Initialization",
+      "description": "Created case, brief, Slack channel, and Nextcloud folder",
+      "status": "success",
+      "n8nWorkflow": "TF_brief_to_project_v5",
+      "triggeredAt": "2025-01-10T08:45:00Z",
+      "completedAt": "2025-01-10T08:45:12Z",
+      "executionTime": "12s",
+      "outputs": {
+        "slackChannel": "#lh-summer-vibes",
+        "nextcloudFolder": "/Projects/BriefBot/047 - Lufthansa Summer Campaign/"
+      },
+      "error": null
+    },
+    {
+      "id": "sys-002",
+      "name": "Brief Sync to Nextcloud",
+      "description": "Synced latest brief changes to project folder",
+      "status": "success",
+      "n8nWorkflow": "Sync Brief to Nextcloud",
+      "triggeredAt": "2025-01-12T11:35:00Z",
+      "completedAt": "2025-01-12T11:35:03Z",
+      "executionTime": "3s",
+      "outputs": null,
+      "error": null
+    },
+    {
+      "id": "sys-003",
+      "name": "Slack Status Update",
+      "description": "Post workflow status to project channel",
+      "status": "failed",
+      "n8nWorkflow": "SlackBot",
+      "triggeredAt": "2025-01-13T14:05:00Z",
+      "completedAt": "2025-01-13T14:05:08Z",
+      "executionTime": "8s",
+      "outputs": null,
+      "error": "Slack API rate limit exceeded. Retry in 60 seconds.",
+      "retryCount": 2,
+      "maxRetries": 3
+    }
+  ],
+  "alerts": [
+    {
+      "id": "alert-001",
+      "type": "blocked",
+      "severity": "high",
+      "stepId": "step-007",
+      "stepName": "Check TBCs",
+      "message": "Step blocked: Waiting on publisher response",
+      "createdAt": "2025-01-13T14:00:00Z",
+      "assignedTo": "user-marcus"
+    },
+    {
+      "id": "alert-002",
+      "type": "approaching",
+      "severity": "medium",
+      "stepId": "step-008",
+      "stepName": "Send List to Client",
+      "message": "Due in 2 days (Jan 17)",
+      "createdAt": "2025-01-15T09:00:00Z",
+      "assignedTo": "user-sarah"
+    },
+    {
+      "id": "alert-003",
+      "type": "system_failure",
+      "severity": "low",
+      "stepId": null,
+      "stepName": null,
+      "message": "Slack status update failed (2/3 retries)",
+      "createdAt": "2025-01-13T14:05:08Z",
+      "assignedTo": null
+    },
+    {
+      "id": "alert-004",
+      "type": "in_progress_long",
+      "severity": "low",
+      "stepId": "step-006",
+      "stepName": "List Safe & Good?",
+      "message": "In progress for 2+ days (expected 30 min)",
+      "createdAt": "2025-01-15T10:00:00Z",
+      "assignedTo": "user-marcus"
+    }
+  ],
+  "progressSummary": {
+    "completedSteps": 5,
+    "totalSteps": 11,
+    "percentComplete": 45,
+    "currentStep": "List Safe & Good?",
+    "blockedCount": 1,
+    "overdueCount": 0
+  }
+}

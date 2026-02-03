@@ -1,0 +1,417 @@
+{
+  "name": "Update Brief from OpenWebUI",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "update-brief-openwebui",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Update Brief",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        112,
+        304
+      ],
+      "webhookId": "update-brief-openwebui-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $json.body || $json;\n\n// Extract session_id (chat_id from OpenWebUI)\nconst sessionId = body.session_id || body.chat_id;\nif (!sessionId) {\n  throw new Error('Missing session_id or chat_id in request');\n}\n\n// Extract updates\nconst updates = body.updates || {};\nif (Object.keys(updates).length === 0) {\n  throw new Error('No updates provided');\n}\n\n// Extract user request for AI validation\nconst userRequest = body.user_request || '';\n\n// Extract user info\nconst user = body.user || {};\nconst userEmail = user.email || 'unknown@tracksandfields.com';\nconst userName = user.name || 'Unknown User';\n\nreturn {\n  json: {\n    sessionId: sessionId,\n    updates: updates,\n    userRequest: userRequest,\n    userEmail: userEmail,\n    userName: userName,\n    timestamp: body.timestamp || new Date().toISOString()\n  }\n};"
+      },
+      "id": "parse-validate",
+      "name": "Parse & Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  c.id as case_id,\n  c.case_number,\n  c.catchy_case_id,\n  c.case_title,\n  c.slack_channel_name,\n  b.id as brief_id,\n  b.session_id,\n  b.analysis,\n  b.version,\n  b.client,\n  b.brand,\n  b.budget_raw,\n  b.territory,\n  b.media,\n  b.keywords,\n  b.submission_deadline\nFROM tf_cases c\nLEFT JOIN tf_briefs b ON b.case_id = c.id\nWHERE b.session_id = $1\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.sessionId] }}"
+        }
+      },
+      "id": "find-brief",
+      "name": "Find Brief by Session ID",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        512,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const briefData = $('Find Brief by Session ID').item.json;\n\n// Parse AI-validated updates from LLM response\nlet updates;\ntry {\n  const aiResponse = $json.text || $json.response || '';\n  const jsonMatch = aiResponse.match(/\\{[\\s\\S]*\\}/);\n  updates = JSON.parse(jsonMatch ? jsonMatch[0] : aiResponse);\n} catch (e) {\n  // Fall back to original updates if AI parsing fails\n  console.warn('Failed to parse AI response, using original updates:', e);\n  updates = $('Parse & Validate Request').item.json.updates;\n}\n\n// Deep clone existing analysis\nconst analysis = JSON.parse(JSON.stringify(briefData.analysis || {}));\n\n// Ensure nested objects exist\nif (!analysis.business_brief) analysis.business_brief = {};\nif (!analysis.creative_brief) analysis.creative_brief = {};\nif (!analysis.deliverables) analysis.deliverables = {};\n\n// Map updates to analysis structure\nconst updateLog = [];\n\nObject.keys(updates).forEach(field => {\n  const value = updates[field];\n  \n  switch(field) {\n    // Business brief fields\n    case 'client':\n      analysis.business_brief.client = value;\n      updateLog.push({field: 'client', oldValue: briefData.client, newValue: value});\n      break;\n    case 'brand':\n      analysis.business_brief.brand = value;\n      updateLog.push({field: 'brand', oldValue: briefData.brand, newValue: value});\n      break;\n    case 'budget':\n      analysis.business_brief.budget = value;\n      updateLog.push({field: 'budget', oldValue: briefData.budget_raw, newValue: value});\n      break;\n    case 'agency':\n      analysis.business_brief.agency = value;\n      updateLog.push({field: 'agency', newValue: value});\n      break;\n    case 'territory':\n      const territories = Array.isArray(value) ? value : value.split(',').map(t => t.trim());\n      analysis.business_brief.territory = territories;\n      updateLog.push({field: 'territory', oldValue: briefData.territory, newValue: territories});\n      break;\n    case 'media':\n      const mediaList = Array.isArray(value) ? value : value.split(',').map(m => m.trim());\n      analysis.business_brief.media = mediaList;\n      updateLog.push({field: 'media', oldValue: briefData.media, newValue: mediaList});\n      break;\n    case 'term':\n      analysis.business_brief.term = value;\n      updateLog.push({field: 'term', newValue: value});\n      break;\n    \n    // Creative brief fields\n    case 'keywords':\n      const keywords = Array.isArray(value) ? value : value.split(',').map(k => k.trim());\n      analysis.creative_brief.keywords = keywords;\n      updateLog.push({field: 'keywords', oldValue: briefData.keywords, newValue: keywords});\n      break;\n    case 'mood':\n      analysis.creative_brief.mood = value;\n      updateLog.push({field: 'mood', newValue: value});\n      break;\n    case 'genres':\n      const genres = Array.isArray(value) ? value : value.split(',').map(g => g.trim());\n      analysis.creative_brief.genres = genres;\n      updateLog.push({field: 'genres', newValue: genres});\n      break;\n    \n    // Deliverable fields\n    case 'submission_deadline':\n    case 'deadline':\n      analysis.deliverables.submission_deadline = value;\n      updateLog.push({field: 'submission_deadline', oldValue: briefData.submission_deadline, newValue: value});\n      break;\n    case 'ppm_date':\n      analysis.deliverables.ppm_date = value;\n      updateLog.push({field: 'ppm_date', newValue: value});\n      break;\n    case 'shoot_date':\n      analysis.deliverables.shoot_date = value;\n      updateLog.push({field: 'shoot_date', newValue: value});\n      break;\n    case 'air_date':\n      analysis.deliverables.air_date = value;\n      updateLog.push({field: 'air_date', newValue: value});\n      break;\n    \n    // Notes\n    case 'note':\n      if (!analysis.extraction_notes) analysis.extraction_notes = '';\n      const timestamp = new Date().toISOString();\n      analysis.extraction_notes += `\\n[${timestamp}] ${value}`;\n      updateLog.push({field: 'note', newValue: value});\n      break;\n    \n    default:\n      console.warn(`Unknown field: ${field}`);\n  }\n});\n\n// Add update metadata to extraction_notes\nconst timestamp = new Date().toISOString();\nconst updateSummary = `Updated ${updateLog.length} field(s) via OpenWebUI`;\nif (!analysis.extraction_notes) analysis.extraction_notes = '';\nanalysis.extraction_notes += `\\n[${timestamp}] ${updateSummary}`;\n\nreturn {\n  json: {\n    briefId: briefData.brief_id,\n    caseId: briefData.case_id,\n    updatedAnalysis: analysis,\n    updateLog: updateLog,\n    updateSummary: updateSummary,\n    updateCount: updateLog.length,\n    caseNumber: briefData.case_number,\n    catchyCaseId: briefData.catchy_case_id,\n    caseTitle: briefData.case_title,\n    slackChannelName: briefData.slack_channel_name\n  }\n};"
+      },
+      "id": "build-updated-analysis",
+      "name": "Build Updated Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tf_briefs\nSET \n  analysis = $1::jsonb,\n  budget_raw = COALESCE($1::jsonb->'business_brief'->>'budget', budget_raw),\n  client = COALESCE($1::jsonb->'business_brief'->>'client', client),\n  brand = COALESCE($1::jsonb->'business_brief'->>'brand', brand),\n  agency = COALESCE($1::jsonb->'business_brief'->>'agency', agency),\n  territory = CASE \n    WHEN jsonb_typeof($1::jsonb->'business_brief'->'territory') = 'array'\n    THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'business_brief'->'territory'))\n    ELSE territory\n  END,\n  media = CASE \n    WHEN jsonb_typeof($1::jsonb->'business_brief'->'media') = 'array'\n    THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'business_brief'->'media'))\n    ELSE media\n  END,\n  keywords = CASE \n    WHEN jsonb_typeof($1::jsonb->'creative_brief'->'keywords') = 'array'\n    THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'creative_brief'->'keywords'))\n    ELSE keywords\n  END,\n  genres = CASE \n    WHEN jsonb_typeof($1::jsonb->'creative_brief'->'genres') = 'array'\n    THEN ARRAY(SELECT jsonb_array_elements_text($1::jsonb->'creative_brief'->'genres'))\n    ELSE genres\n  END,\n  submission_deadline = CASE \n    WHEN $1::jsonb->'deliverables'->>'submission_deadline' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n    THEN ($1::jsonb->'deliverables'->>'submission_deadline')::timestamp\n    ELSE submission_deadline\n  END,\n  ppm_date = CASE \n    WHEN $1::jsonb->'deliverables'->>'ppm_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n    THEN ($1::jsonb->'deliverables'->>'ppm_date')::timestamp\n    ELSE ppm_date\n  END,\n  shoot_date = CASE \n    WHEN $1::jsonb->'deliverables'->>'shoot_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n    THEN ($1::jsonb->'deliverables'->>'shoot_date')::timestamp\n    ELSE shoot_date\n  END,\n  air_date = CASE \n    WHEN $1::jsonb->'deliverables'->>'air_date' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'\n    THEN ($1::jsonb->'deliverables'->>'air_date')::timestamp\n    ELSE air_date\n  END,\n  version = version + 1,\n  updated_at = NOW()\nWHERE id = $2::uuid\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [\n  JSON.stringify($json.updatedAnalysis),\n  $json.briefId\n] }}"
+        }
+      },
+      "id": "update-brief-db",
+      "name": "Update Brief in Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1120,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tf_case_activity (\n  case_id,\n  activity_type,\n  activity_description,\n  user_id,\n  source,\n  changes\n)\nVALUES (\n  $1::uuid,\n  'brief_updated',\n  $2,\n  (SELECT id FROM tf_users WHERE email = $3 LIMIT 1),\n  'openwebui',\n  $4::jsonb\n)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Build Updated Analysis').item.json.caseId,\n  'Brief updated via OpenWebUI: ' + $('Build Updated Analysis').item.json.updateSummary,\n  $('Parse & Validate Request').item.json.userEmail,\n  JSON.stringify({\n    openwebui_user: $('Parse & Validate Request').item.json.userName,\n    user_email: $('Parse & Validate Request').item.json.userEmail,\n    session_id: $('Parse & Validate Request').item.json.sessionId,\n    updates: $('Build Updated Analysis').item.json.updateLog,\n    ai_summary: $('Build Updated Analysis').item.json.updateSummary\n  })\n] }}"
+        }
+      },
+      "id": "log-activity",
+      "name": "Log Update Activity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1312,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "R5wJ4eC0LXb7yjnd",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const updateData = $('Build Updated Analysis').item.json;\nconst briefData = $('Update Brief in Database').item.json;\nconst userData = $('Parse & Validate Request').item.json;\n\nconst updatesList = updateData.updateLog.map(change => {\n  let changeText = `• *${change.field}*`;\n  if (change.oldValue !== undefined && change.oldValue !== null) {\n    changeText += `: ${formatValue(change.oldValue)} → ${formatValue(change.newValue)}`;\n  } else {\n    changeText += `: ${formatValue(change.newValue)}`;\n  }\n  return changeText;\n}).join('\\n');\n\nfunction formatValue(value) {\n  if (Array.isArray(value)) {\n    return value.join(', ');\n  }\n  if (value === null || value === undefined) {\n    return '_not set_';\n  }\n  return String(value);\n}\n\nconst message = `✅ **Brief Updated from OpenWebUI**\\n\\n` +\n  `**Case:** ${updateData.catchyCaseId} - ${updateData.caseTitle}\\n` +\n  `**Updated by:** ${userData.userName}\\n` +\n  `**Version:** v${briefData.version}\\n\\n` +\n  `**Updates Applied:**\\n${updatesList}\\n\\n` +\n  `_Brief updated at ${new Date().toLocaleString()}_`;\n\nreturn {\n  json: {\n    channel: updateData.slackChannelName,\n    text: message\n  }\n};"
+      },
+      "id": "format-slack-message",
+      "name": "Format Slack Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.channel }}",
+          "mode": "name"
+        },
+        "text": "={{ $json.text }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "post-slack",
+      "name": "Post to Slack Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1712,
+        304
+      ],
+      "webhookId": "d035aa61-aa49-4294-beda-9dc233e4c8c5",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "oCgTO5tYUzsuVeLy",
+          "name": "Slack account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const updateData = $('Build Updated Analysis').item.json;\nconst briefData = $('Update Brief in Database').item.json;\n\nreturn {\n  json: {\n    success: true,\n    case_number: updateData.caseNumber,\n    catchy_case_id: updateData.catchyCaseId,\n    case_title: updateData.caseTitle,\n    version: briefData.version,\n    slack_channel: updateData.slackChannelName,\n    updates_applied: $('Build Updated Analysis').item.json.updateLog,\n    update_count: updateData.updateCount,\n    message: `Successfully updated ${updateData.updateCount} field(s) for ${updateData.catchyCaseId}`\n  }\n};"
+      },
+      "id": "build-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2112,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CURRENT BRIEF DATA:\n{{ JSON.stringify({ client: $json.client, brand: $json.brand, budget: $json.budget_raw, territory: $json.territory, media: $json.media, keywords: $json.keywords, submission_deadline: $json.submission_deadline }, null, 2) }}\n\nUSER'S REQUEST:\n\"{{ $('Parse & Validate Request').item.json.userRequest }}\"\n\nSUGGESTED UPDATES:\n{{ JSON.stringify($('Parse & Validate Request').item.json.updates, null, 2) }}\n\nValidate and correct the field mappings. Return ONLY a valid JSON object with the corrected updates. No explanation, no markdown, just the JSON.",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an AI assistant that validates and corrects brief update field mappings for a music licensing company.\n\nAVAILABLE FIELDS:\n- client: Client/advertiser name\n- brand: Brand/product name  \n- agency: Agency name\n- budget: Budget amount (e.g., \"€50,000\")\n- term: Campaign duration/length/period - NOT a date (e.g., \"1 year\", \"6 months\", \"perpetual\")\n- territory: Regions/markets (array, e.g., [\"EMEA\", \"US\"])\n- media: Media channels (array, e.g., [\"TV\", \"Digital\"])\n- keywords: Creative descriptors (array, e.g., [\"upbeat\", \"energetic\"])\n- mood: Creative tone (e.g., \"energetic\", \"calm\")\n- genres: Music genres (array, e.g., [\"Electronic\", \"Pop\"])\n- submission_deadline: Date to submit music (YYYY-MM-DD) - NOT campaign duration\n- ppm_date: Pre-production meeting date (YYYY-MM-DD)\n- shoot_date: Filming date (YYYY-MM-DD)\n- air_date: Launch/release date (YYYY-MM-DD)\n- note: Additional context to append\n\nCRITICAL DISTINCTIONS:\n- \"term\" = campaign LENGTH/DURATION (e.g., \"1 year\", \"6 months\")\n- \"submission_deadline\" = specific DATE when music is due\n- If user mentions \"campaign length\", \"duration\", \"usage period\" → use \"term\"\n- If user mentions \"deadline\", \"due date\", \"submit by\" → use \"submission_deadline\""
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        672,
+        176
+      ],
+      "id": "c6435a76-fd7d-4afa-afe0-d4a9359b0d5d",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        720,
+        576
+      ],
+      "id": "200e214c-5233-4261-9d8b-1b9ad20cd374",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "PpKC9FAWHuKWALgs",
+          "name": "Groq Creds"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "xpnOcoHAwqtpm6d7"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "case_id": "={{ $('Build Updated Analysis').item.json.caseId }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "execute-sync-workflow",
+      "name": "Sync Brief to Nextcloud",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1136,
+        512
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Update Brief": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Find Brief by Session ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Brief by Session ID": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Updated Analysis": {
+      "main": [
+        [
+          {
+            "node": "Update Brief in Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Brief in Database": {
+      "main": [
+        [
+          {
+            "node": "Log Update Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Sync Brief to Nextcloud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Update Activity": {
+      "main": [
+        [
+          {
+            "node": "Format Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Slack Channel": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Build Updated Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "cb0acd3f-76a7-4c41-b8f6-39dc367ed008",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "27d74fdf4a6138506ab2af8024f163764cffd6e3f1afe42b0b372c347eb2fa68"
+  },
+  "id": "6c4UWPOhua0t3DdE",
+  "tags": []
+}

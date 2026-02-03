@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/damo/Desktop/Code/clients/tf/TF_workflow_v6/product-plan/shell/components"
+    ],
+    "allow": [
+      "Bash(npm run build:*)"
+    ]
+  }
+}

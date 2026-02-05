@@ -52,10 +52,17 @@ export interface FlatExtractedBrief {
   air_date?: string
   deadline_urgency?: string
   first_presentation_date?: string
+  kickoff_date?: string
+  // Context fields
+  campaign_context?: string
+  target_audience?: string
+  brand_values?: string[]
   // Who fields
   brief_sender_name?: string
   brief_sender_email?: string
   brief_sender_role?: string
+  // Notes
+  extraction_notes?: string  // Agent observations about ambiguous/interpreted information
 }
 
 // Calculate margin based on project type
@@ -299,7 +306,7 @@ export function mapBriefToFields(brief: FlatExtractedBrief | null): AllFields {
       keyDates: {
         label: 'Key Dates',
         fields: [
-          { id: 'kickoff_date', label: 'Kick-off Date', value: '', type: 'date', status: 'empty', priority: 'helpful', placeholder: 'Project start date' },
+          { id: 'kickoff_date', label: 'Kick-off Date', value: b.kickoff_date || '', type: 'date', status: getFieldStatus(b.kickoff_date), priority: 'helpful', placeholder: 'Project start date' },
           { id: 'first_presentation_date', label: 'First Presentation', value: b.first_presentation_date || '', type: 'date', status: getFieldStatus(b.first_presentation_date), priority: 'important', placeholder: 'Internal first look' },
           { id: 'client_presentation_date', label: 'Client Presentation', value: '', type: 'date', status: 'empty', priority: 'important', placeholder: 'Present to client' },
           { id: 'deadline_date', label: 'Final Deadline', value: b.deadline_date || '', type: 'date', status: getFieldStatus(b.deadline_date), priority: 'critical', placeholder: 'Final approval needed' },
@@ -318,9 +325,9 @@ export function mapBriefToFields(brief: FlatExtractedBrief | null): AllFields {
       context: {
         label: 'Campaign Context',
         fields: [
-          { id: 'campaign_context', label: 'Campaign Background', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Background on the campaign' },
-          { id: 'target_audience', label: 'Target Audience', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Who is this campaign for?' },
-          { id: 'brand_values', label: 'Brand Values', value: [], type: 'tags', status: 'empty', priority: 'helpful', placeholder: 'Add brand attributes' },
+          { id: 'campaign_context', label: 'Campaign Background', value: b.campaign_context || '', type: 'textarea', status: getFieldStatus(b.campaign_context), priority: 'helpful', placeholder: 'Background on the campaign' },
+          { id: 'target_audience', label: 'Target Audience', value: b.target_audience || '', type: 'textarea', status: getFieldStatus(b.target_audience), priority: 'helpful', placeholder: 'Who is this campaign for?' },
+          { id: 'brand_values', label: 'Brand Values', value: b.brand_values || [], type: 'tags', status: getFieldStatus(b.brand_values), priority: 'helpful', placeholder: 'Add brand attributes' },
           { id: 'previous_music', label: 'Previous Music', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Past music used by client' },
           { id: 'competitor_info', label: 'Competitor Info', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Competitor music usage' },
         ],
@@ -328,7 +335,7 @@ export function mapBriefToFields(brief: FlatExtractedBrief | null): AllFields {
       notes: {
         label: 'Notes & Comments',
         fields: [
-          { id: 'notes', label: 'Additional Notes', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Any other relevant notes' },
+          { id: 'extraction_notes', label: 'Additional Notes', value: b.extraction_notes || '', type: 'textarea', status: getFieldStatus(b.extraction_notes), priority: 'helpful', placeholder: 'Any other relevant notes' },
           { id: 'approval_risks', label: 'Approval Risks', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Known approval challenges' },
         ],
       },

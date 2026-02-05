@@ -106,10 +106,11 @@ export function CreateProjectModal({
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
+                <label htmlFor="create-project-case-id" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
                   Case ID <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="create-project-case-id"
                   type="text"
                   required
                   placeholder="e.g., BMW-Summer-Drive"
@@ -120,10 +121,11 @@ export function CreateProjectModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
+                <label htmlFor="create-project-title" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
                   Project Title <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="create-project-title"
                   type="text"
                   required
                   placeholder="e.g., BMW Summer Campaign 2024"
@@ -134,10 +136,11 @@ export function CreateProjectModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
+                <label htmlFor="create-project-client" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
                   Client <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="create-project-client"
                   type="text"
                   required
                   placeholder="e.g., BMW"
@@ -148,10 +151,11 @@ export function CreateProjectModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
+                <label htmlFor="create-project-agency" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5 font-['DM_Sans']">
                   Agency <span className="text-zinc-400">(optional)</span>
                 </label>
                 <input
+                  id="create-project-agency"
                   type="text"
                   placeholder="e.g., Jung von Matt"
                   value={formData.agency}

@@ -79,6 +79,7 @@ export interface TFBrief {
   brief_quality: string | null
   completion_rate: number | null
   missing_information: string[] | null
+  extraction_notes: string | null // Agent observations about the extraction (e.g., "air date was 'mid-March' - interpreted as March 15")
   version: number
   created_at: string
   updated_at: string

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState, useRef } from 'react'
 import { useCopilotChat, useCoAgent } from '@copilotkit/react-core'
 import { Role, TextMessage } from '@copilotkit/runtime-client-gql'
+import { useRouter } from 'next/navigation'
 import { BriefWorkspace } from '@/components/brief-workspace'
 import type { ChatMessage, SuggestionChip } from '@/components/brief-extraction/types'
 import type { TabId, ProjectType } from '@/components/project-canvas/types'
@@ -34,16 +35,26 @@ interface BriefAnalyzerState {
   project_type: string | null
   suggestion_chips: SuggestionChip[]
   field_updates: string[]
+  current_project_id: string | null
+}
+
+const EMPTY_AGENT_STATE: BriefAnalyzerState = {
+  messages: [],
+  extracted_brief: null,
+  completeness: 0,
+  project_type: null,
+  suggestion_chips: [],
+  field_updates: [],
+  current_project_id: null,
 }
 
 export default function NewProjectPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('WHAT')
+  const router = useRouter()
   const [typeOverride, setTypeOverride] = useState<ProjectType | null>(null)
   // Local state for user field edits (overrides agent state)
   const [localFieldOverrides, setLocalFieldOverrides] = useState<Record<string, unknown>>({})
   // Track saved project ID (null = new project, string = saved)
   const [savedProjectId, setSavedProjectId] = useState<string | null>(null)
-  const [isSaving, setIsSaving] = useState(false)
   // Track the last saved brief state to detect agent-initiated changes
   const lastSavedBriefRef = useRef<FlatExtractedBrief | null>(null)
 
@@ -54,18 +65,9 @@ export default function NewProjectPage() {
   const { state, setState } = useCoAgent<BriefAnalyzerState>({
     name: 'brief_analyzer',
     initialState: {
-      messages: [],
-      extracted_brief: null,
-      completeness: 0,
-      project_type: null,
-      suggestion_chips: [],
-      field_updates: [],
+      ...EMPTY_AGENT_STATE,
     },
   })
-
-  // Debug: log state
-  console.log('DEBUG state:', state)
-  console.log('DEBUG extracted_brief:', state?.extracted_brief)
 
   // Get extracted brief from agent state, merged with local overrides
   const extractedBrief = useMemo(() => {
@@ -82,6 +84,7 @@ export default function NewProjectPage() {
   const messages: ChatMessage[] = useMemo(() => {
     const stateMessages = state?.messages || []
     return stateMessages
+      .slice(-60)
       .filter((msg) => msg.type === 'human' || msg.type === 'ai')
       .map((msg) => {
         const role = msg.type === 'human' ? 'user' : 'assistant'
@@ -89,7 +92,7 @@ export default function NewProjectPage() {
           id: msg.id,
           role: role as 'user' | 'assistant',
           content: msg.content || '',
-          timestamp: new Date().toISOString(),
+          timestamp: '',
         }
       })
   }, [state?.messages])
@@ -165,9 +168,21 @@ export default function NewProjectPage() {
   // Chat callbacks
   const handleSendMessage = useCallback(
     (content: string) => {
+      if (savedProjectId) {
+        setState((prev) => {
+          const previous = prev || EMPTY_AGENT_STATE
+          if (previous.current_project_id === savedProjectId) {
+            return previous
+          }
+          return {
+            ...previous,
+            current_project_id: savedProjectId,
+          }
+        })
+      }
       appendMessage(new TextMessage({ content, role: Role.User }))
     },
-    [appendMessage]
+    [appendMessage, savedProjectId, setState]
   )
 
   const handleChipClick = useCallback(
@@ -189,11 +204,10 @@ export default function NewProjectPage() {
 
   // Canvas callbacks
   const handleTabChange = useCallback((tabId: TabId) => {
-    setActiveTab(tabId)
+    void tabId
   }, [])
 
   const handleFieldUpdate = useCallback((fieldId: string, value: unknown) => {
-    console.log('Field update:', fieldId, value)
     // Store user edits in local state (overrides agent state)
     setLocalFieldOverrides(prev => ({
       ...prev,
@@ -211,7 +225,6 @@ export default function NewProjectPage() {
       return
     }
 
-    setIsSaving(true)
     console.log('Saving project to Supabase...')
     console.log('Brief data:', extractedBrief)
 
@@ -238,6 +251,15 @@ export default function NewProjectPage() {
         projectId = createResult.id
         setSavedProjectId(projectId)
         console.log('Created new project:', projectId)
+
+        // Persist project context in agent state so follow-up chat edits are project-aware.
+        setState((prev) => {
+          const previous = prev || EMPTY_AGENT_STATE
+          return {
+            ...previous,
+            current_project_id: projectId,
+          }
+        })
       }
 
       // Map the extracted brief to the API format
@@ -278,6 +300,7 @@ export default function NewProjectPage() {
         extraction_status: 'complete',
         completeness: state?.completeness || 0,
         project_type: state?.project_type || 'C',
+        extraction_notes: extractedBrief.extraction_notes,
       }
 
       // Update the brief
@@ -312,13 +335,16 @@ export default function NewProjectPage() {
       // Show success feedback
       alert(`Project saved successfully! ID: ${projectId}`)
 
+      // Move to the persisted project route so navigation/chat uses project-scoped context.
+      if (projectId) {
+        router.push(`/projects/${projectId}`)
+      }
+
     } catch (error) {
       console.error('Error saving project:', error)
       alert('Failed to save project. Check the console for details.')
-    } finally {
-      setIsSaving(false)
     }
-  }, [extractedBrief, localFieldOverrides, state, setState, savedProjectId])
+  }, [extractedBrief, localFieldOverrides, state, setState, savedProjectId, router])
 
   const handleCreateSlack = useCallback(() => {
     console.log('Create Slack channel')

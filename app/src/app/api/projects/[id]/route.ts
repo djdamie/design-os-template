@@ -1,6 +1,105 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/client'
+import { N8N_ENDPOINTS, callN8NWebhook } from '@/lib/n8n/client'
 import type { TFBrief } from '@/lib/supabase/types'
+
+// Month name to number mapping
+const MONTHS: Record<string, number> = {
+  january: 0, jan: 0,
+  february: 1, feb: 1,
+  march: 2, mar: 2,
+  april: 3, apr: 3,
+  may: 4,
+  june: 5, jun: 5,
+  july: 6, jul: 6,
+  august: 7, aug: 7,
+  september: 8, sep: 8, sept: 8,
+  october: 9, oct: 9,
+  november: 10, nov: 10,
+  december: 11, dec: 11,
+}
+
+// Helper to parse natural language dates like "mid-March", "early April", "late January"
+function parseNaturalDate(value: string): Date | null {
+  const normalized = value.toLowerCase().trim()
+
+  // Try patterns like "mid-March", "early April", "late January 2024"
+  const timeModifiers = ['early', 'mid', 'late', 'end of', 'beginning of', 'start of']
+
+  for (const modifier of timeModifiers) {
+    if (normalized.includes(modifier)) {
+      // Extract month name
+      for (const [monthName, monthNum] of Object.entries(MONTHS)) {
+        if (normalized.includes(monthName)) {
+          // Determine approximate day based on modifier
+          let day = 15 // default to mid-month
+          if (modifier === 'early' || modifier === 'beginning of' || modifier === 'start of') {
+            day = 5
+          } else if (modifier === 'mid') {
+            day = 15
+          } else if (modifier === 'late' || modifier === 'end of') {
+            day = 25
+          }
+
+          // Extract year if present, otherwise use current/next year
+          const yearMatch = normalized.match(/\b(20\d{2})\b/)
+          let year = new Date().getFullYear()
+          if (yearMatch) {
+            year = parseInt(yearMatch[1], 10)
+          } else {
+            // If the month is in the past, assume next year
+            const now = new Date()
+            if (monthNum < now.getMonth() || (monthNum === now.getMonth() && day < now.getDate())) {
+              year = now.getFullYear() + 1
+            }
+          }
+
+          return new Date(year, monthNum, day)
+        }
+      }
+    }
+  }
+
+  // Try "next Wednesday", "this Friday" patterns
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  for (let i = 0; i < days.length; i++) {
+    if (normalized.includes(days[i])) {
+      const now = new Date()
+      const currentDay = now.getDay()
+      let daysToAdd = i - currentDay
+      if (daysToAdd <= 0) daysToAdd += 7 // next week
+      if (normalized.includes('next')) daysToAdd += 7
+      const result = new Date(now)
+      result.setDate(result.getDate() + daysToAdd)
+      return result
+    }
+  }
+
+  return null
+}
+
+// Helper to validate and sanitize date fields
+// Handles ISO dates, natural language dates, and returns null for truly invalid dates
+function sanitizeDate(value: unknown): string | null {
+  if (!value) return null
+  if (typeof value !== 'string') return null
+
+  // First, try to parse as standard date
+  const date = new Date(value)
+  if (!isNaN(date.getTime())) {
+    return date.toISOString()
+  }
+
+  // Try to parse natural language date
+  const naturalDate = parseNaturalDate(value)
+  if (naturalDate) {
+    return naturalDate.toISOString()
+  }
+
+  // Could not parse - return null
+  console.warn(`Could not parse date: "${value}"`)
+  return null
+}
 
 // GET /api/projects/[id] - Fetch a project with its brief
 export async function GET(
@@ -83,14 +182,14 @@ export async function PUT(
       campaign_context: body.campaign_context,
       target_audience: body.target_audience,
       brand_values: body.brand_values,
-      // Timeline
-      submission_deadline: body.submission_deadline || body.deadline_date,
-      first_presentation_date: body.first_presentation_date,
-      ppm_date: body.ppm_date,
-      shoot_date: body.shoot_date,
-      offline_date: body.offline_date,
-      online_date: body.online_date,
-      air_date: body.air_date,
+      // Timeline - sanitize dates to prevent invalid timestamp errors
+      submission_deadline: sanitizeDate(body.submission_deadline || body.deadline_date),
+      first_presentation_date: sanitizeDate(body.first_presentation_date),
+      ppm_date: sanitizeDate(body.ppm_date),
+      shoot_date: sanitizeDate(body.shoot_date),
+      offline_date: sanitizeDate(body.offline_date),
+      online_date: sanitizeDate(body.online_date),
+      air_date: sanitizeDate(body.air_date),
       deadline_urgency: body.deadline_urgency,
       // Source
       raw_brief_text: body.raw_brief_text,
@@ -100,6 +199,7 @@ export async function PUT(
       brief_quality: body.brief_quality,
       completion_rate: body.completion_rate || body.completeness,
       missing_information: body.missing_information,
+      extraction_notes: body.extraction_notes,
       updated_at: new Date().toISOString(),
     }
 
@@ -174,21 +274,142 @@ export async function POST(
     const body = await request.json()
     const supabase = createServerClient()
 
+    const { data: projectData, error: projectError } = await supabase
+      .from('tf_cases')
+      .select('id, case_number, catchy_case_id, project_title, slack_channel, nextcloud_folder, tf_briefs(*)')
+      .eq('id', id)
+      .single()
+
+    if (projectError || !projectData) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+
+    const brief = Array.isArray(projectData.tf_briefs) ? projectData.tf_briefs[0] : projectData.tf_briefs
+    const briefPayload = body.brief_data || {
+      client: brief?.client,
+      agency: brief?.agency,
+      brand: brief?.brand,
+      media: brief?.media,
+      territory: brief?.territory,
+      budget_raw: brief?.budget_raw,
+      submission_deadline: brief?.submission_deadline,
+      air_date: brief?.air_date,
+      mood: brief?.mood || brief?.creative_direction,
+    }
+
     // Handle different actions
     switch (body.action) {
-      case 'create_slack_channel':
-        // This will be implemented with n8n webhook
-        return NextResponse.json({
-          message: 'Slack channel creation triggered',
-          status: 'pending'
-        })
+      case 'create_slack_channel': {
+        const payload = {
+          action: 'create_slack_channel',
+          project_id: id,
+          case_id: projectData.catchy_case_id || projectData.case_number || id,
+          case_number: projectData.case_number,
+          catchy_case_id: projectData.catchy_case_id,
+          project_title: body.project_title || projectData.project_title || brief?.project_title,
+          brief_data: briefPayload,
+        }
 
-      case 'create_nextcloud_folder':
-        // This will be implemented with n8n webhook
+        const result = await callN8NWebhook(N8N_ENDPOINTS.briefIntake, payload)
+        if (!result.success) {
+          await logActivity(
+            supabase,
+            id,
+            'slack_channel_failed',
+            result.error || 'Slack channel creation failed',
+            body.user_id,
+            { payload, error: result.error },
+            'n8n'
+          )
+          return NextResponse.json(
+            { error: result.error || 'Slack channel creation failed' },
+            { status: 500 }
+          )
+        }
+
+        const webhookResult = result as unknown as Record<string, unknown>
+        const channelValue = webhookResult.slack_channel
+          || webhookResult.slack_channel_id
+          || projectData.slack_channel
+
+        if (channelValue) {
+          await supabase
+            .from('tf_cases')
+            .update({ slack_channel: String(channelValue), updated_at: new Date().toISOString() })
+            .eq('id', id)
+        }
+
+        await logActivity(
+          supabase,
+          id,
+          'slack_channel_created',
+          `Slack channel created: ${String(channelValue || '')}`.trim(),
+          body.user_id,
+          { payload, result },
+          'n8n'
+        )
+
         return NextResponse.json({
-          message: 'Nextcloud folder creation triggered',
-          status: 'pending'
+          success: true,
+          slack_channel: channelValue || null,
         })
+      }
+
+      case 'create_nextcloud_folder': {
+        const payload = {
+          action: 'create_nextcloud_folder',
+          project_id: id,
+          case_id: projectData.catchy_case_id || projectData.case_number || id,
+          case_number: projectData.case_number,
+          catchy_case_id: projectData.catchy_case_id,
+          project_title: body.project_title || projectData.project_title || brief?.project_title,
+          brief_data: briefPayload,
+        }
+
+        const result = await callN8NWebhook(N8N_ENDPOINTS.syncNextcloud, payload)
+        if (!result.success) {
+          await logActivity(
+            supabase,
+            id,
+            'nextcloud_folder_failed',
+            result.error || 'Nextcloud folder creation failed',
+            body.user_id,
+            { payload, error: result.error },
+            'n8n'
+          )
+          return NextResponse.json(
+            { error: result.error || 'Nextcloud folder creation failed' },
+            { status: 500 }
+          )
+        }
+
+        const webhookResult = result as unknown as Record<string, unknown>
+        const folderValue = webhookResult.nextcloud_folder
+          || webhookResult.nextcloud_folder_url
+          || projectData.nextcloud_folder
+
+        if (folderValue) {
+          await supabase
+            .from('tf_cases')
+            .update({ nextcloud_folder: String(folderValue), updated_at: new Date().toISOString() })
+            .eq('id', id)
+        }
+
+        await logActivity(
+          supabase,
+          id,
+          'nextcloud_folder_created',
+          `Nextcloud folder created: ${String(folderValue || '')}`.trim(),
+          body.user_id,
+          { payload, result },
+          'n8n'
+        )
+
+        return NextResponse.json({
+          success: true,
+          nextcloud_folder: folderValue || null,
+        })
+      }
 
       default:
         return NextResponse.json(
@@ -212,7 +433,8 @@ async function logActivity(
   activityType: string,
   description: string,
   userId?: string,
-  changes?: Record<string, unknown>
+  changes?: Record<string, unknown>,
+  source: 'ui' | 'chat' | 'n8n' | 'api' = 'ui'
 ) {
   try {
     await supabase.from('tf_case_activity').insert({
@@ -220,7 +442,7 @@ async function logActivity(
       activity_type: activityType,
       activity_description: description,
       user_id: userId || null,
-      source: 'ui',
+      source,
       changes: changes || null,
     })
   } catch (error) {

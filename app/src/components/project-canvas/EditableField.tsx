@@ -19,7 +19,7 @@ const priorityStyles = {
   },
 }
 
-function formatValue(value: unknown, type: string): string {
+function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return ''
   if (Array.isArray(value)) {
     if (value.length === 0) return ''
@@ -390,7 +390,15 @@ export function EditableField({ field, teamMembers = [], onUpdate }: EditableFie
     }
 
     if (field.type === 'date' && field.value) {
-      const date = new Date(String(field.value))
+      const rawValue = String(field.value)
+      const isoDateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+      const date = isoDateOnlyMatch
+        ? new Date(
+            Number(isoDateOnlyMatch[1]),
+            Number(isoDateOnlyMatch[2]) - 1,
+            Number(isoDateOnlyMatch[3])
+          )
+        : new Date(rawValue)
       return (
         <span className="inline-flex items-center gap-1.5 text-sm text-zinc-900 dark:text-zinc-100 font-['DM_Sans']">
           <Calendar className="h-4 w-4 text-zinc-400" />
@@ -409,7 +417,7 @@ export function EditableField({ field, teamMembers = [], onUpdate }: EditableFie
 
     return (
       <span className="text-sm text-zinc-900 dark:text-zinc-100 font-['DM_Sans'] whitespace-pre-wrap">
-        {formatValue(field.value, field.type)}
+        {formatValue(field.value)}
       </span>
     )
   }
@@ -424,9 +432,9 @@ export function EditableField({ field, teamMembers = [], onUpdate }: EditableFie
     >
       {/* Label row */}
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 font-['DM_Sans']">
+        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 font-['DM_Sans']">
           {field.label}
-        </label>
+        </span>
         <div className="flex items-center gap-2">
           {isAiFilled && !isEditing && (
             <span className="inline-flex items-center gap-1 text-[10px] text-sky-500 font-['DM_Sans']">

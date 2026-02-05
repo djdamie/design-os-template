@@ -1,12 +1,10 @@
 'use client'
 
-import { use, useState, useCallback, useMemo, useEffect } from 'react'
+import { use, useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useCoAgent, useCopilotChat, useCopilotReadable } from '@copilotkit/react-core'
 import { Role, TextMessage } from '@copilotkit/runtime-client-gql'
 import { BriefWorkspace } from '@/components/brief-workspace'
 import { useCanvasData, updateFieldValue, ExtractedBrief } from '@/hooks/use-canvas-data'
-import { N8N_ENDPOINTS, callN8NWebhook } from '@/lib/n8n/client'
-import { transformFieldsToN8NPayload, type N8NUser } from '@/lib/n8n/transform'
 import type { AllFields, ProjectType, TabId, CanvasField } from '@/components/project-canvas/types'
 import type { ChatMessage, SuggestionChip } from '@/components/brief-extraction/types'
 import type { TFProjectWithBrief } from '@/lib/supabase/types'
@@ -76,8 +74,15 @@ function transformFieldsToApiFormat(fields: AllFields): Record<string, unknown> 
     stems_required: getFieldValue(fields, 'WITH_WHAT', 'deliverables', 'stems_required'),
     sync_points: getFieldValue(fields, 'WITH_WHAT', 'technical', 'sync_points'),
     submission_deadline: getFieldValue(fields, 'WHEN', 'keyDates', 'deadline_date'),
+    first_presentation_date: getFieldValue(fields, 'WHEN', 'keyDates', 'first_presentation_date'),
     air_date: getFieldValue(fields, 'WHEN', 'keyDates', 'air_date'),
     deadline_urgency: getFieldValue(fields, 'WHEN', 'urgency', 'deadline_urgency'),
+    // Context
+    campaign_context: getFieldValue(fields, 'OTHER', 'context', 'campaign_context'),
+    target_audience: getFieldValue(fields, 'OTHER', 'context', 'target_audience'),
+    brand_values: getFieldValue(fields, 'OTHER', 'context', 'brand_values'),
+    // Notes
+    extraction_notes: getFieldValue(fields, 'OTHER', 'notes', 'extraction_notes'),
   }
 }
 
@@ -101,6 +106,38 @@ interface BriefAnalyzerState {
   current_project_id: string | null  // Project ID for fetching data from database
 }
 
+function messageContentToText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object' && 'text' in item) {
+          const text = (item as { text?: unknown }).text
+          return typeof text === 'string' ? text : ''
+        }
+        return ''
+      })
+      .filter(Boolean)
+      .join('\n')
+  }
+  if (content && typeof content === 'object' && 'text' in content) {
+    const text = (content as { text?: unknown }).text
+    return typeof text === 'string' ? text : ''
+  }
+  return ''
+}
+
+const EMPTY_AGENT_STATE: BriefAnalyzerState = {
+  messages: [],
+  extracted_brief: null,
+  completeness: 0,
+  project_type: null,
+  suggestion_chips: [],
+  field_updates: [],
+  current_project_id: null,
+}
+
 export default function BriefWorkspacePage({
   params,
 }: {
@@ -110,6 +147,7 @@ export default function BriefWorkspacePage({
 
   // State for fetched project data
   const [fetchedBrief, setFetchedBrief] = useState<ExtractedBrief | null>(null)
+  const [fetchedProjectData, setFetchedProjectData] = useState<TFProjectWithBrief | null>(null)
   const [isLoadingProject, setIsLoadingProject] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
@@ -119,19 +157,98 @@ export default function BriefWorkspacePage({
   const [projectTypeOverride, setProjectTypeOverride] = useState<ProjectType | null>(null)
 
   // CopilotKit hooks for bidirectional sync
-  const { appendMessage, isLoading } = useCopilotChat()
+  const { appendMessage, isLoading, visibleMessages } = useCopilotChat()
   const { state, setState } = useCoAgent<BriefAnalyzerState>({
     name: 'brief_analyzer',
     initialState: {
-      messages: [],
-      extracted_brief: null,
-      completeness: 0,
-      project_type: null,
-      suggestion_chips: [],
-      field_updates: [],
+      ...EMPTY_AGENT_STATE,
       current_project_id: id, // Pass project ID to the agent so it can fetch data
     },
   })
+
+  // Store setState in a ref to avoid infinite loops in useEffect.
+  // The setState from useCoAgent may not be stable across renders.
+  const setStateRef = useRef(setState)
+  useEffect(() => {
+    setStateRef.current = setState
+  }, [setState])
+
+  // Keep current project id in agent state without forcing redundant updates.
+  useEffect(() => {
+    const setStateFn = setStateRef.current
+    if (!setStateFn) return
+    setStateFn((prev) => {
+      const previous = prev || EMPTY_AGENT_STATE
+      if (previous.current_project_id === id) {
+        return previous
+      }
+      if (previous.current_project_id && previous.current_project_id !== id) {
+        return {
+          ...EMPTY_AGENT_STATE,
+          current_project_id: id,
+        }
+      }
+      return {
+        ...previous,
+        current_project_id: id,
+      }
+    })
+  }, [id])
+
+  // Reset only local UI overrides when the route project changes.
+  useEffect(() => {
+    setFetchedBrief(null)
+    setFetchedProjectData(null)
+    setLocalFields(null)
+    setHasUnsavedChanges(false)
+    setProjectTypeOverride(null)
+    setFetchError(null)
+  }, [id])
+
+  useEffect(() => {
+    const setStateFn = setStateRef.current
+    if (!setStateFn || !fetchedProjectData) return
+
+    const fetchedCompleteness = fetchedProjectData.tf_briefs
+      ? (Array.isArray(fetchedProjectData.tf_briefs)
+          ? fetchedProjectData.tf_briefs[0]?.completion_rate
+          : fetchedProjectData.tf_briefs.completion_rate) || 0
+      : 0
+    const fetchedBriefData = transformSupabaseToBrief(fetchedProjectData)
+
+    setStateFn((prev) => {
+      const previous = prev || EMPTY_AGENT_STATE
+      const isSameProject = previous.current_project_id === id
+      const hasExistingBrief =
+        isSameProject &&
+        !!previous.extracted_brief &&
+        Object.keys(previous.extracted_brief).length > 0
+      const nextExtractedBrief = hasExistingBrief ? previous.extracted_brief : fetchedBriefData
+      const nextCompleteness =
+        isSameProject && previous.completeness > 0 ? previous.completeness : fetchedCompleteness
+      const nextProjectType =
+        isSameProject && previous.project_type
+          ? previous.project_type
+          : fetchedProjectData.project_type || null
+      const needsUpdate =
+        previous.current_project_id !== id ||
+        previous.extracted_brief !== nextExtractedBrief ||
+        previous.completeness !== nextCompleteness ||
+        previous.project_type !== nextProjectType
+
+      if (!needsUpdate) {
+        return previous
+      }
+
+      return {
+        ...previous,
+        extracted_brief: nextExtractedBrief,
+        completeness: nextCompleteness,
+        project_type: nextProjectType,
+        current_project_id: id,
+      }
+    })
+  }, [id, fetchedProjectData])
 
   // Fetch project data from Supabase on mount
   useEffect(() => {
@@ -150,22 +267,9 @@ export default function BriefWorkspacePage({
           }
         } else {
           const data: TFProjectWithBrief = await response.json()
+          setFetchedProjectData(data)
           const brief = transformSupabaseToBrief(data)
           setFetchedBrief(brief)
-          
-          // Initialize agent state with fetched data so chat can answer questions about it
-          if (brief && setState) {
-            setState({
-              ...state,
-              extracted_brief: brief as ExtractedBrief,
-              completeness: data.tf_briefs 
-                ? (Array.isArray(data.tf_briefs) 
-                    ? data.tf_briefs[0]?.completion_rate 
-                    : data.tf_briefs.completion_rate) || 0
-                : 0,
-              project_type: data.project_type || null,
-            })
-          }
         }
       } catch (err) {
         console.error('Error fetching project:', err)
@@ -176,17 +280,18 @@ export default function BriefWorkspacePage({
     }
 
     fetchProject()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  // Use agent state if available, otherwise use fetched data
-  const effectiveBrief = state?.extracted_brief || fetchedBrief
+  // Use agent state only when it belongs to this route's project.
+  const hasCurrentProjectState = state?.current_project_id === id
+  const effectiveBrief = hasCurrentProjectState
+    ? state?.extracted_brief || fetchedBrief
+    : fetchedBrief
 
-  // Provide brief data as context to the CopilotKit agent
-  // This ensures the agent has access to the loaded project data when answering questions
-  useCopilotReadable({
-    description: "The current project brief data loaded from the database. Use this to answer questions about the project.",
-    value: effectiveBrief ? JSON.stringify({
+  // Memoize the brief data for CopilotReadable to prevent expensive JSON.stringify on every render
+  const briefReadableValue = useMemo(() => {
+    if (!effectiveBrief) return "No brief data loaded yet."
+    return JSON.stringify({
       project_title: effectiveBrief.project_title,
       client_name: effectiveBrief.client_name,
       agency_name: effectiveBrief.agency_name,
@@ -207,42 +312,66 @@ export default function BriefWorkspacePage({
       air_date: effectiveBrief.air_date,
       brief_sender_name: effectiveBrief.brief_sender_name,
       brief_sender_email: effectiveBrief.brief_sender_email,
-    }, null, 2) : "No brief data loaded yet.",
+    }, null, 2)
+  }, [effectiveBrief])
+
+  // Provide brief data as context to the CopilotKit agent
+  // This ensures the agent has access to the loaded project data when answering questions
+  useCopilotReadable({
+    description: "The current project brief data loaded from the database. Use this to answer questions about the project.",
+    value: briefReadableValue,
   })
 
-  // Debug: log state
-  console.log('DEBUG state:', state)
-  console.log('DEBUG extracted_brief:', state?.extracted_brief)
-  console.log('DEBUG fetchedBrief:', fetchedBrief)
-  console.log('DEBUG effectiveBrief:', effectiveBrief)
-
   // Get canvas data from hook (transforms agent state or fetched data)
-  console.log('>>> BEFORE useCanvasData call, effectiveBrief:', !!effectiveBrief)
-  const canvasData = useCanvasData(id, effectiveBrief)
-  console.log('>>> AFTER useCanvasData call, got project type:', canvasData.project.projectType)
-
-  // Debug: log what useCanvasData returned
-  console.log('DEBUG canvasData.completenessBreakdown:', canvasData.completenessBreakdown)
-  console.log('DEBUG canvasData project_title field:',
-    canvasData.fields?.WHAT?.projectDetails?.fields?.find((f: { id: string }) => f.id === 'project_title')
+  // Pass project metadata so caseTitle and caseNumber are set correctly
+  const canvasData = useCanvasData(
+    id, 
+    effectiveBrief,
+    fetchedProjectData ? {
+      project_title: fetchedProjectData.project_title,
+      case_number: fetchedProjectData.case_number,
+      catchy_case_id: fetchedProjectData.catchy_case_id,
+      slack_channel: fetchedProjectData.slack_channel,
+      nextcloud_folder: fetchedProjectData.nextcloud_folder,
+    } : null
   )
 
   // Use local fields if modified, otherwise use computed fields
   const effectiveFields = localFields || canvasData.fields
-  console.log('DEBUG using localFields:', !!localFields)
 
-  // Convert LangGraph messages to chat format
+  // Prefer persisted Copilot chat history, fallback to co-agent state messages.
   const messages: ChatMessage[] = useMemo(() => {
-    const stateMessages = state?.messages || []
+    if (visibleMessages && visibleMessages.length > 0) {
+      return (visibleMessages as unknown as Array<Record<string, unknown>>)
+        .slice(-60)
+        .filter((msg) => {
+          const role = String(msg.role || '').toLowerCase()
+          return role.includes('user') || role.includes('assistant')
+        })
+        .map((msg, index) => {
+          const role = String(msg.role || '').toLowerCase().includes('user') ? 'user' : 'assistant'
+          const content = messageContentToText(msg.content)
+
+          return {
+            id: String(msg.id || `${role}-${index}`),
+            role,
+            content,
+            timestamp: String(msg.createdAt || ''),
+          }
+        })
+    }
+
+    const stateMessages = hasCurrentProjectState ? state?.messages || [] : []
     return stateMessages
+      .slice(-60)
       .filter((msg) => msg.type === 'human' || msg.type === 'ai')
       .map((msg) => ({
         id: msg.id,
         role: (msg.type === 'human' ? 'user' : 'assistant') as 'user' | 'assistant',
         content: msg.content || '',
-        timestamp: new Date().toISOString(),
+        timestamp: '',
       }))
-  }, [state?.messages])
+  }, [visibleMessages, hasCurrentProjectState, state?.messages])
 
   // Project context for chat header
   const projectContext = useMemo(
@@ -265,18 +394,32 @@ export default function BriefWorkspacePage({
       setHasUnsavedChanges(true)
 
       // Sync to agent state
-      if (state && setState) {
-        setState({
-          ...state,
-          extracted_brief: {
-            ...state.extracted_brief,
+      const setStateFn = setStateRef.current
+      if (setStateFn) {
+        setStateFn((prev) => {
+          const previous = prev || EMPTY_AGENT_STATE
+          const nextExtractedBrief = {
+            ...(previous.extracted_brief || {}),
             [fieldId]: value,
-          },
-          field_updates: [...(state.field_updates || []), fieldId],
+          }
+          const nextFieldUpdates = [...(previous.field_updates || []), fieldId]
+          const needsUpdate =
+            previous.extracted_brief !== nextExtractedBrief ||
+            previous.current_project_id !== id
+
+          if (!needsUpdate) {
+            return previous
+          }
+          return {
+            ...previous,
+            extracted_brief: nextExtractedBrief,
+            field_updates: nextFieldUpdates,
+            current_project_id: id,
+          }
         })
       }
     },
-    [canvasData.fields, state, setState]
+    [canvasData.fields, id]
   )
 
   // Handle tab change
@@ -290,15 +433,8 @@ export default function BriefWorkspacePage({
     setHasUnsavedChanges(true)
   }, [])
 
-  // Save status for UI feedback
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
   // Handle save
   const handleSave = useCallback(async () => {
-    setIsSaving(true)
-    setSaveError(null)
-
     try {
       const briefData = transformFieldsToApiFormat(effectiveFields)
 
@@ -322,37 +458,31 @@ export default function BriefWorkspacePage({
       setLocalFields(null)
     } catch (error) {
       console.error('Failed to save project:', error)
-      setSaveError(error instanceof Error ? error.message : 'Failed to save')
-    } finally {
-      setIsSaving(false)
     }
   }, [id, effectiveFields, projectTypeOverride])
 
   // Handle Slack channel creation
   const handleCreateSlack = useCallback(async () => {
-    // Create user object for n8n payload
-    const user: N8NUser = {
-      email: 'user@tracksandfields.com', // TODO: Get from auth context
-      name: 'Project Owner',
-      id: id,
-      role: 'user',
-    }
-
     try {
-      const payload = transformFieldsToN8NPayload(effectiveFields, id, user)
-      const result = await callN8NWebhook(N8N_ENDPOINTS.briefIntake, {
-        ...payload,
-        action: 'create_slack_channel',
-        case_number: canvasData.project.caseNumber,
-        case_id: canvasData.project.caseId,
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_slack_channel',
+          project_title: canvasData.project.caseTitle,
+          brief_data: transformFieldsToApiFormat(effectiveFields),
+        }),
       })
 
-      if (result.success) {
-        console.log('Slack channel created:', result.slack_channel)
-        // TODO: Update integration status in state
-      } else {
-        console.error('Failed to create Slack channel:', result.error)
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create Slack channel')
       }
+
+      setFetchedProjectData((prev) => prev ? {
+        ...prev,
+        slack_channel: result.slack_channel || prev.slack_channel || null,
+      } : prev)
     } catch (error) {
       console.error('Failed to create Slack channel:', error)
     }
@@ -360,29 +490,26 @@ export default function BriefWorkspacePage({
 
   // Handle Nextcloud folder creation
   const handleCreateNextcloud = useCallback(async () => {
-    // Create user object for n8n payload
-    const user: N8NUser = {
-      email: 'user@tracksandfields.com', // TODO: Get from auth context
-      name: 'Project Owner',
-      id: id,
-      role: 'user',
-    }
-
     try {
-      const payload = transformFieldsToN8NPayload(effectiveFields, id, user)
-      const result = await callN8NWebhook(N8N_ENDPOINTS.syncNextcloud, {
-        ...payload,
-        action: 'create_nextcloud_folder',
-        case_number: canvasData.project.caseNumber,
-        case_id: canvasData.project.caseId,
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_nextcloud_folder',
+          project_title: canvasData.project.caseTitle,
+          brief_data: transformFieldsToApiFormat(effectiveFields),
+        }),
       })
 
-      if (result.success) {
-        console.log('Nextcloud folder created:', result.nextcloud_folder)
-        // TODO: Update integration status in state
-      } else {
-        console.error('Failed to create Nextcloud folder:', result.error)
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create Nextcloud folder')
       }
+
+      setFetchedProjectData((prev) => prev ? {
+        ...prev,
+        nextcloud_folder: result.nextcloud_folder || prev.nextcloud_folder || null,
+      } : prev)
     } catch (error) {
       console.error('Failed to create Nextcloud folder:', error)
     }
@@ -401,9 +528,22 @@ export default function BriefWorkspacePage({
   // Handle send message in chat
   const handleSendMessage = useCallback(
     (content: string) => {
+      const setStateFn = setStateRef.current
+      if (setStateFn) {
+        setStateFn((prev) => {
+          const previous = prev || EMPTY_AGENT_STATE
+          if (previous.current_project_id === id) {
+            return previous
+          }
+          return {
+            ...previous,
+            current_project_id: id,
+          }
+        })
+      }
       appendMessage(new TextMessage({ content, role: Role.User }))
     },
-    [appendMessage]
+    [appendMessage, id]
   )
 
   // Handle chip click

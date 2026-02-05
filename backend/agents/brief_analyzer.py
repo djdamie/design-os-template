@@ -58,10 +58,35 @@ ALL_FIELDS = CRITICAL_FIELDS + IMPORTANT_FIELDS + HELPFUL_FIELDS + [
     "budget_currency",
     "exclusivity_details",
     "must_avoid",
+    "deadline_urgency",
     "first_presentation_date",
     "kickoff_date",
     "brief_sender_role",
+    "campaign_context",
+    "target_audience",
+    "brand_values",
+    "extraction_notes",
 ]
+
+
+def resolve_project_id(state: dict[str, Any]) -> str | None:
+    """Resolve project UUID from explicit state first, then Copilot thread metadata."""
+    explicit = state.get("current_project_id")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    copilot_meta = state.get("copilotkit") or {}
+    if isinstance(copilot_meta, dict):
+        thread_id = (
+            copilot_meta.get("threadId")
+            or copilot_meta.get("thread_id")
+            or copilot_meta.get("thread")
+        )
+        if isinstance(thread_id, str) and thread_id.startswith("project:"):
+            candidate = thread_id.split("project:", 1)[1].strip()
+            return candidate or None
+
+    return None
 
 
 # =============================================================================
@@ -182,6 +207,12 @@ class ExtractedBrief(TypedDict, total=False):
     brief_sender_name: str
     brief_sender_email: str
     brief_sender_role: str
+    # Context
+    campaign_context: str
+    target_audience: str
+    brand_values: list[str]
+    # Notes
+    extraction_notes: str  # Agent observations about ambiguous/interpreted information
 
 
 class SuggestionChip(TypedDict):
@@ -204,6 +235,7 @@ class OutputState(CopilotKitState):
     project_type: str | None
     suggestion_chips: list[SuggestionChip]
     field_updates: list[str]
+    current_project_id: str | None
 
 
 class BriefAnalyzerState(InputState, OutputState):
@@ -287,6 +319,23 @@ def classify_project_type(budget: float | None) -> str | None:
         return "D"
     else:
         return "E"
+
+
+def normalize_project_type(value: Any) -> str | None:
+    """Normalize user-provided project type labels to canonical values."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    upper = raw.upper()
+    if upper in {"A", "B", "C", "D", "E"}:
+        return upper
+    if upper in {"PRODUCTION", "PROD"}:
+        return "Production"
+
+    return None
 
 
 def generate_suggestion_chips(brief: ExtractedBrief) -> list[SuggestionChip]:
@@ -394,6 +443,14 @@ Extract the following information if present:
 - brief_sender_name: Name of person who sent the brief
 - brief_sender_email: Email of person who sent the brief
 - brief_sender_role: Role/title of brief sender
+- campaign_context: Background information about the campaign or product launch
+- target_audience: Who the campaign is aimed at (demographics, psychographics)
+- brand_values: List of brand attributes or values mentioned (e.g., ["innovative", "premium", "sustainable"])
+- extraction_notes: Your observations about ambiguous or interpreted information. Use this to note things like:
+  - "Air date was 'mid-March' - interpreted as March 15, 2026"
+  - "Budget described as 'around 18k' - may need confirmation"
+  - "Deadline urgency unclear - client said 'by next Wednesday'"
+  - "Reference track 'cozy Sunday morning vibes' - interpreted as acoustic/indie-folk genre"
 
 **Response Format**:
 - For extractions/updates: Respond with a JSON object containing the fields you extracted/updated and a "summary" field.
@@ -419,7 +476,10 @@ async def extract_node(state: BriefAnalyzerState) -> dict:
     messages = state.get("messages", [])
     if not messages:
         print("DEBUG: No messages in state")
-        return {"messages": [AIMessage(content="I didn't receive any message. Please paste your brief.")]}
+        return {
+            "messages": [AIMessage(content="I didn't receive any message. Please paste your brief.")],
+            "current_project_id": state.get("current_project_id"),
+        }
 
     last_message = messages[-1]
     print(f"DEBUG: Last message type: {type(last_message)}, content: {last_message}")
@@ -433,7 +493,10 @@ async def extract_node(state: BriefAnalyzerState) -> dict:
         user_message = last_message.content
     else:
         print(f"DEBUG: Unknown message type: {type(last_message)}")
-        return {"messages": [AIMessage(content="I couldn't read your message. Please try again.")]}
+        return {
+            "messages": [AIMessage(content="I couldn't read your message. Please try again.")],
+            "current_project_id": state.get("current_project_id"),
+        }
 
     print(f"DEBUG: User message: {user_message[:100] if user_message else 'empty'}...")
     
@@ -441,7 +504,7 @@ async def extract_node(state: BriefAnalyzerState) -> dict:
     current_brief_dict = dict(state.get("extracted_brief") or {})
     
     # Get current project ID from state or try to extract from context
-    project_id = state.get("current_project_id")
+    project_id = resolve_project_id(state)
     print(f"DEBUG: Current project ID: {project_id}")
     print(f"DEBUG: Current brief has {len(current_brief_dict)} fields")
     
@@ -524,6 +587,7 @@ Provide a clear, direct answer."""
                         return {
                             "messages": [AIMessage(content=answer_response.content)],
                             "extracted_brief": current_brief_dict,
+                            "current_project_id": project_id,
                         }
                 except json.JSONDecodeError:
                     pass
@@ -548,10 +612,19 @@ Provide a clear, direct answer."""
         print(f"DEBUG: Existing brief has {len(current_brief_dict)} fields")
         print(f"DEBUG: LLM extracted {len(extracted)} fields: {list(extracted.keys())}")
 
+        explicit_project_type = None
         for key, value in extracted.items():
             # Check if value is meaningful (not None, not empty string, not empty list)
             # But allow False and 0 as valid values
             is_meaningful = value is not None and value != "" and value != []
+
+            if key == "project_type":
+                normalized_type = normalize_project_type(value) if is_meaningful else None
+                if normalized_type and normalized_type != state.get("project_type"):
+                    explicit_project_type = normalized_type
+                    field_updates.append("project_type")
+                    print(f"DEBUG: Updated root project_type to: {normalized_type}")
+                continue
 
             if is_meaningful and key in ALL_FIELDS:
                 if current_brief_dict.get(key) != value:
@@ -565,7 +638,7 @@ Provide a clear, direct answer."""
 
         # Calculate completeness and project type
         completeness = calculate_completeness(current_brief_dict)
-        project_type = classify_project_type(current_brief_dict.get("budget_amount"))
+        project_type = explicit_project_type or classify_project_type(current_brief_dict.get("budget_amount"))
 
         # Generate suggestion chips
         suggestion_chips = generate_suggestion_chips(current_brief_dict)
@@ -585,7 +658,9 @@ Provide a clear, direct answer."""
         else:
             response_parts.append(f"\n\nThe brief is **{completeness}% complete**. This is a solid brief with most key information captured.")
 
-        if project_type:
+        if explicit_project_type:
+            response_parts.append(f"\n\nProject type has been set to **{project_type}** based on your instruction.")
+        elif project_type:
             budget = current_brief_dict.get("budget_amount")
             response_parts.append(f"\n\nBased on the budget of €{budget:,.0f}, this is classified as a **Type {project_type}** project.")
 
@@ -598,6 +673,7 @@ Provide a clear, direct answer."""
             "project_type": project_type,
             "suggestion_chips": suggestion_chips,
             "field_updates": field_updates,
+            "current_project_id": project_id,
         }
 
     except (json.JSONDecodeError, KeyError) as e:
@@ -608,6 +684,7 @@ Provide a clear, direct answer."""
         return {
             "messages": [ai_message],
             "field_updates": [],
+            "current_project_id": project_id,
         }
 
 

@@ -20,7 +20,7 @@ export function BriefExtraction({
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
   }, [messages])
 
   return (
@@ -71,7 +71,7 @@ export function BriefExtraction({
               Paste your brief to get started
             </h3>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 font-['DM_Sans'] max-w-sm">
-              Copy and paste the client email or brief document below. I'll extract the key details
+              Copy and paste the client email or brief document below. I&apos;ll extract the key details
               and help identify any missing information.
             </p>
           </div>

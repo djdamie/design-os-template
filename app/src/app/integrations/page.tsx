@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Integrations } from '@/components/integrations'
-import sampleData from '@/data/integrations-sample.json'
 import type {
   CurrentUser,
   ServiceConnection,
@@ -12,48 +12,156 @@ import type {
 } from '@/components/integrations/types'
 
 export default function IntegrationsPage() {
-  // Type-cast sample data (JSON doesn't preserve literal types)
-  const currentUser = sampleData.currentUser as CurrentUser
-  const serviceConnections = sampleData.serviceConnections as ServiceConnection[]
-  const integrationEvents = sampleData.integrationEvents as IntegrationEvent[]
-  const webhookConfigs = sampleData.webhookConfigs as WebhookConfig[]
-  const pendingRetries = sampleData.pendingRetries as PendingRetry[]
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [serviceConnections, setServiceConnections] = useState<ServiceConnection[]>([])
+  const [integrationEvents, setIntegrationEvents] = useState<IntegrationEvent[]>([])
+  const [webhookConfigs, setWebhookConfigs] = useState<WebhookConfig[]>([])
+  const [pendingRetries, setPendingRetries] = useState<PendingRetry[]>([])
 
-  // Callbacks (stubs for now - will connect to backend later)
-  const handleSyncProject = useCallback((projectId: string, serviceId: string) => {
-    console.log('Sync project:', projectId, serviceId)
+  const loadIntegrations = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch('/api/integrations')
+      if (!response.ok) {
+        throw new Error('Failed to load integrations')
+      }
+
+      const data = await response.json()
+      setCurrentUser(data.currentUser as CurrentUser)
+      setServiceConnections(data.serviceConnections as ServiceConnection[])
+      setIntegrationEvents(data.integrationEvents as IntegrationEvent[])
+      setWebhookConfigs(data.webhookConfigs as WebhookConfig[])
+      setPendingRetries(data.pendingRetries as PendingRetry[])
+    } catch (error) {
+      console.error('Failed to load integrations:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
-  const handleRetry = useCallback((retryId: string) => {
-    console.log('Retry:', retryId)
+  useEffect(() => {
+    loadIntegrations()
+  }, [loadIntegrations])
+
+  const postIntegrationAction = useCallback(async (payload: Record<string, unknown>) => {
+    const response = await fetch('/api/integrations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}))
+      throw new Error((error as { error?: string }).error || 'Integration action failed')
+    }
+    return response.json()
   }, [])
 
-  const handleToggleWebhook = useCallback((webhookId: string, enabled: boolean) => {
-    console.log('Toggle webhook:', webhookId, enabled)
-  }, [])
+  const handleSyncProject = useCallback(async (projectId: string, serviceId: string) => {
+    try {
+      await postIntegrationAction({
+        action: 'sync_service',
+        projectId,
+        serviceId,
+      })
+      await loadIntegrations()
+    } catch (error) {
+      console.error('Sync failed:', error)
+    }
+  }, [loadIntegrations, postIntegrationAction])
+
+  const handleRetry = useCallback(async (retryId: string) => {
+    const retry = pendingRetries.find((item) => item.id === retryId)
+    if (!retry) return
+    try {
+      await postIntegrationAction({
+        action: 'retry_event',
+        eventId: retry.eventId,
+      })
+      await loadIntegrations()
+    } catch (error) {
+      console.error('Retry failed:', error)
+    }
+  }, [loadIntegrations, pendingRetries, postIntegrationAction])
+
+  const handleToggleWebhook = useCallback(async (webhookId: string, enabled: boolean) => {
+    try {
+      await postIntegrationAction({
+        action: 'toggle_webhook',
+        webhookId,
+        enabled,
+      })
+      await loadIntegrations()
+    } catch (error) {
+      console.error('Toggle webhook failed:', error)
+    }
+  }, [loadIntegrations, postIntegrationAction])
 
   const handleUpdateWebhookConfig = useCallback(
-    (webhookId: string, config: Partial<WebhookConfig>) => {
-      console.log('Update webhook config:', webhookId, config)
+    async (webhookId: string, config: Partial<WebhookConfig>) => {
+      try {
+        await postIntegrationAction({
+          action: 'update_webhook',
+          webhookId,
+          config,
+        })
+        await loadIntegrations()
+      } catch (error) {
+        console.error('Update webhook failed:', error)
+      }
     },
-    []
+    [loadIntegrations, postIntegrationAction]
   )
 
-  const handleTestWebhook = useCallback((webhookId: string) => {
-    console.log('Test webhook:', webhookId)
-  }, [])
+  const handleTestWebhook = useCallback(async (webhookId: string) => {
+    const webhook = webhookConfigs.find((item) => item.id === webhookId)
+    if (!webhook) return
+    try {
+      await postIntegrationAction({
+        action: 'test_webhook',
+        webhookId,
+        serviceId: webhook.serviceId,
+      })
+      await loadIntegrations()
+    } catch (error) {
+      console.error('Test webhook failed:', error)
+    }
+  }, [loadIntegrations, postIntegrationAction, webhookConfigs])
 
-  const handleDismissEvent = useCallback((eventId: string) => {
-    console.log('Dismiss event:', eventId)
-  }, [])
+  const handleDismissEvent = useCallback(async (eventId: string) => {
+    setIntegrationEvents((prev) => prev.filter((event) => event.id !== eventId))
+    try {
+      await postIntegrationAction({
+        action: 'dismiss_event',
+        eventId,
+      })
+    } catch (error) {
+      console.error('Dismiss event failed:', error)
+    }
+  }, [postIntegrationAction])
 
   const handleViewEventDetails = useCallback((eventId: string) => {
-    console.log('View event details:', eventId)
-  }, [])
+    const event = integrationEvents.find((item) => item.id === eventId)
+    if (event) {
+      console.log('Integration event:', event)
+    }
+  }, [integrationEvents])
 
   const handleNavigateToProject = useCallback((projectId: string) => {
-    console.log('Navigate to project:', projectId)
-  }, [])
+    router.push(`/projects/${projectId}`)
+  }, [router])
+
+  if (isLoading || !currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-stone-950">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-fuchsia-500 mx-auto mb-4" />
+          <p className="text-stone-400">Loading integrations...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Integrations

@@ -11,8 +11,6 @@ import type {
   IntegrationStatus,
   ClassificationReasoning,
   TabId,
-  FieldStatus,
-  FieldPriority,
 } from '@/components/project-canvas/types'
 import { calculateMargin } from '@/types/types'
 
@@ -69,6 +67,9 @@ export interface ExtractedBrief {
   target_audience?: string
   brand_values?: string[]
 
+  // Agent notes
+  extraction_notes?: string  // Agent observations about ambiguous/interpreted information
+
   // Allow additional fields
   [key: string]: unknown
 }
@@ -84,14 +85,6 @@ export interface CanvasData {
   classificationReasoning: ClassificationReasoning
 }
 
-// Helper to determine field status from value
-function getFieldStatus(value: unknown, existingStatus?: FieldStatus): FieldStatus {
-  if (existingStatus === 'user-edited') return 'user-edited'
-  if (value === null || value === undefined || value === '') return 'empty'
-  if (Array.isArray(value) && value.length === 0) return 'empty'
-  return existingStatus || 'ai-filled'
-}
-
 // Calculate completeness from fields
 function calculateCompleteness(fields: AllFields): CompletenessBreakdown {
   const criticalFields: string[] = []
@@ -102,9 +95,7 @@ function calculateCompleteness(fields: AllFields): CompletenessBreakdown {
   // Walk through all fields and categorize
   const tabIds: TabId[] = ['WHAT', 'WHO', 'WITH_WHAT', 'WHEN', 'OTHER']
 
-  // Debug: Check if fields structure is valid
   if (!fields || typeof fields !== 'object') {
-    console.warn('calculateCompleteness: fields is invalid:', fields)
     return {
       score: 0,
       criticalComplete: 0,
@@ -120,14 +111,12 @@ function calculateCompleteness(fields: AllFields): CompletenessBreakdown {
   for (const tabId of tabIds) {
     const tabFields = fields[tabId]
     if (!tabFields) {
-      console.debug(`calculateCompleteness: No fields for tab ${tabId}`)
       continue
     }
 
     for (const groupKey of Object.keys(tabFields)) {
       const group = tabFields[groupKey as keyof typeof tabFields]
       if (!group?.fields) {
-        console.debug(`calculateCompleteness: No fields in group ${tabId}.${groupKey}`)
         continue
       }
 
@@ -219,47 +208,74 @@ function calculateTabMissing(
 // Hook to get canvas data
 export function useCanvasData(
   projectId: string,
-  extractedBrief?: ExtractedBrief | null
+  extractedBrief?: ExtractedBrief | null,
+  projectMetadata?: {
+    project_title?: string | null
+    case_number?: number | string | null
+    catchy_case_id?: string | null
+    slack_channel?: string | null
+    nextcloud_folder?: string | null
+  } | null
 ): CanvasData {
-  // Log hook call BEFORE useMemo
-  console.log('>>> useCanvasData HOOK CALLED with extractedBrief:', !!extractedBrief, extractedBrief?.project_title)
-
-  // Create a stable dependency key from the brief content to ensure useMemo detects changes
-  // React's useMemo uses reference equality for objects, which can miss updates
-  const briefKey = extractedBrief ? JSON.stringify(extractedBrief) : 'null'
-  console.log('>>> useCanvasData briefKey length:', briefKey.length)
+  // Memoize the brief key to prevent expensive JSON.stringify on every render.
+  // Only recalculate when the extractedBrief reference changes.
+  const briefKey = useMemo(
+    () => (extractedBrief ? JSON.stringify(extractedBrief) : 'null'),
+    [extractedBrief]
+  )
 
   return useMemo(() => {
-    console.log('>>> useCanvasData useMemo EXECUTING (briefKey length:', briefKey.length, ')')
     // Start with sample data as base
     const sampleData = sampleDataJson as unknown as CanvasData
 
-    // Debug logging (use console.log not console.debug to ensure visibility)
-    console.log('useCanvasData called:', {
-      projectId,
-      hasExtractedBrief: !!extractedBrief,
-      extractedBriefKeys: extractedBrief ? Object.keys(extractedBrief) : [],
-      project_title: extractedBrief?.project_title,
-    })
-
-    // If no extracted brief, return sample data
+    // If no extracted brief, return sample data with metadata applied
     if (!extractedBrief) {
-      console.log('useCanvasData: No extracted brief, using sample data (completeness:', sampleData.completenessBreakdown.score, '%)')
+      const projectTitle = projectMetadata?.project_title || sampleData.project.caseTitle
+      const caseNumberRaw = projectMetadata?.case_number
+      const caseNumber = typeof caseNumberRaw === 'number'
+        ? caseNumberRaw
+        : typeof caseNumberRaw === 'string'
+        ? Number.parseInt(caseNumberRaw.replace('TF-', ''), 36) || sampleData.project.caseNumber
+        : sampleData.project.caseNumber
+      const caseId = projectMetadata?.catchy_case_id || projectId.slice(0, 8)
+      const slackChannel = projectMetadata?.slack_channel || null
+      const nextcloudFolder = projectMetadata?.nextcloud_folder || null
+      const integrationStatus: IntegrationStatus = {
+        ...sampleData.integrationStatus,
+        slack: {
+          connected: !!slackChannel,
+          channelName: slackChannel,
+          channelUrl: slackChannel?.startsWith('http') ? slackChannel : null,
+          connectedAt: slackChannel ? new Date().toISOString() : null,
+        },
+        nextcloud: {
+          connected: !!nextcloudFolder,
+          folderPath: nextcloudFolder,
+          folderUrl: nextcloudFolder?.startsWith('http') ? nextcloudFolder : null,
+          connectedAt: nextcloudFolder ? new Date().toISOString() : null,
+        },
+      }
+      
       return {
-        project: sampleData.project,
+        project: {
+          ...sampleData.project,
+          id: projectId,
+          caseTitle: projectTitle,
+          caseNumber: caseNumber,
+          caseId: caseId,
+        },
         marginCalculation: sampleData.marginCalculation,
         completenessBreakdown: sampleData.completenessBreakdown,
         tabs: sampleData.tabs,
         fields: sampleData.fields,
         teamMembers: sampleData.teamMembers,
-        integrationStatus: sampleData.integrationStatus,
+        integrationStatus,
         classificationReasoning: sampleData.classificationReasoning,
       }
     }
 
     // Merge extracted brief data into fields
     const mergedFields = JSON.parse(JSON.stringify(sampleData.fields)) as AllFields
-    let fieldsUpdatedCount = 0
 
     // Helper function to update a field if the value exists in extracted brief
     const updateField = (
@@ -268,39 +284,19 @@ export function useCanvasData(
       fieldId: string,
       value: unknown
     ) => {
-      // Log specifically for project_title to trace the issue
-      if (fieldId === 'project_title') {
-        console.log(`updateField: project_title called with value:`, value)
-      }
-
       if (value === undefined || value === null || value === '') {
-        if (fieldId === 'project_title') {
-          console.log(`updateField: project_title skipped - value is empty/null/undefined`)
-        }
         return
       }
       if (Array.isArray(value) && value.length === 0) return
 
       const tabFields = mergedFields[tab]
-      if (!tabFields) {
-        console.log(`updateField: Tab ${tab} not found`)
-        return
-      }
+      if (!tabFields) return
       const groupFields = tabFields[group as keyof typeof tabFields]
-      if (!groupFields?.fields) {
-        console.log(`updateField: Group ${tab}.${group} not found`)
-        return
-      }
+      if (!groupFields?.fields) return
       const field = groupFields.fields.find(f => f.id === fieldId)
       if (field) {
         field.value = value
         field.status = 'ai-filled'
-        fieldsUpdatedCount++
-        if (fieldId === 'project_title') {
-          console.log(`updateField: project_title UPDATED to:`, value, 'status:', field.status)
-        }
-      } else {
-        console.log(`updateField: Field ${fieldId} not found in ${tab}.${group}`)
       }
     }
 
@@ -310,6 +306,7 @@ export function useCanvasData(
     updateField('WHAT', 'clientInfo', 'brand_name', extractedBrief.brand_name)
     updateField('WHAT', 'clientInfo', 'brief_sender_name', extractedBrief.brief_sender_name)
     updateField('WHAT', 'clientInfo', 'brief_sender_email', extractedBrief.brief_sender_email)
+    updateField('WHAT', 'clientInfo', 'brief_sender_role', extractedBrief.brief_sender_role)
 
     // WHAT tab - Project Details
     updateField('WHAT', 'projectDetails', 'project_title', extractedBrief.project_title)
@@ -344,15 +341,18 @@ export function useCanvasData(
     updateField('WHEN', 'keyDates', 'deadline_date', extractedBrief.deadline_date)
     updateField('WHEN', 'keyDates', 'first_presentation_date', extractedBrief.first_presentation_date)
     updateField('WHEN', 'keyDates', 'air_date', extractedBrief.air_date)
+    updateField('WHEN', 'keyDates', 'kickoff_date', extractedBrief.kickoff_date)
 
     // WHEN tab - Urgency
     updateField('WHEN', 'urgency', 'deadline_urgency', extractedBrief.deadline_urgency)
 
-    console.log(`useCanvasData: Updated ${fieldsUpdatedCount} fields from extracted brief`)
+    // OTHER tab - Context
+    updateField('OTHER', 'context', 'campaign_context', extractedBrief.campaign_context)
+    updateField('OTHER', 'context', 'target_audience', extractedBrief.target_audience)
+    updateField('OTHER', 'context', 'brand_values', extractedBrief.brand_values)
 
-    // Verify project_title was set correctly
-    const projectTitleField = mergedFields.WHAT?.projectDetails?.fields?.find(f => f.id === 'project_title')
-    console.log('useCanvasData: project_title field after merge:', projectTitleField)
+    // OTHER tab - Notes
+    updateField('OTHER', 'notes', 'extraction_notes', extractedBrief.extraction_notes)
 
     // Calculate margin from budget
     const budget = extractedBrief.budget_amount || sampleData.marginCalculation.budget
@@ -360,13 +360,6 @@ export function useCanvasData(
 
     // Recalculate completeness
     const completenessBreakdown = calculateCompleteness(mergedFields)
-    console.log('useCanvasData: Calculated completeness:', {
-      score: completenessBreakdown.score,
-      criticalComplete: `${completenessBreakdown.criticalComplete}/${completenessBreakdown.criticalTotal}`,
-      importantComplete: `${completenessBreakdown.importantComplete}/${completenessBreakdown.importantTotal}`,
-      helpfulComplete: `${completenessBreakdown.helpfulComplete}/${completenessBreakdown.helpfulTotal}`,
-      missingFieldsCount: completenessBreakdown.missingFields.length,
-    })
 
     // Recalculate tab badges
     const tabs = calculateTabMissing(mergedFields, completenessBreakdown)
@@ -386,9 +379,39 @@ export function useCanvasData(
     }
 
     // Update project with new values
+    // Prioritize: extractedBrief.project_title > projectMetadata.project_title > sample data
+    const projectTitle = extractedBrief.project_title || projectMetadata?.project_title || sampleData.project.caseTitle
+    const caseNumberRaw = projectMetadata?.case_number
+    const caseNumber = typeof caseNumberRaw === 'number'
+      ? caseNumberRaw
+      : typeof caseNumberRaw === 'string'
+      ? Number.parseInt(caseNumberRaw.replace('TF-', ''), 36) || sampleData.project.caseNumber
+      : sampleData.project.caseNumber
+    const caseId = projectMetadata?.catchy_case_id || projectId.slice(0, 8)
+    const slackChannel = projectMetadata?.slack_channel || null
+    const nextcloudFolder = projectMetadata?.nextcloud_folder || null
+    const integrationStatus: IntegrationStatus = {
+      ...sampleData.integrationStatus,
+      slack: {
+        connected: !!slackChannel,
+        channelName: slackChannel,
+        channelUrl: slackChannel?.startsWith('http') ? slackChannel : null,
+        connectedAt: slackChannel ? new Date().toISOString() : null,
+      },
+      nextcloud: {
+        connected: !!nextcloudFolder,
+        folderPath: nextcloudFolder,
+        folderUrl: nextcloudFolder?.startsWith('http') ? nextcloudFolder : null,
+        connectedAt: nextcloudFolder ? new Date().toISOString() : null,
+      },
+    }
+    
     const project: Project = {
       ...sampleData.project,
       id: projectId,
+      caseTitle: projectTitle,
+      caseNumber: caseNumber,
+      caseId: caseId,
       projectType: marginCalculation.tier,
       completeness: completenessBreakdown.score,
     }
@@ -400,14 +423,22 @@ export function useCanvasData(
       tabs,
       fields: mergedFields,
       teamMembers: sampleData.teamMembers,
-      integrationStatus: sampleData.integrationStatus,
+      integrationStatus,
       classificationReasoning,
     }
-    console.log('>>> useCanvasData useMemo COMPLETE - returning project type:', result.project.projectType, 'completeness:', result.completenessBreakdown.score)
     return result
     // Use briefKey (stringified version) to ensure useMemo detects content changes
+    // Include projectMetadata in dependencies
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, briefKey])
+  }, [
+    projectId,
+    briefKey,
+    projectMetadata?.project_title,
+    projectMetadata?.case_number,
+    projectMetadata?.catchy_case_id,
+    projectMetadata?.slack_channel,
+    projectMetadata?.nextcloud_folder,
+  ])
 }
 
 // Hook to update a single field value

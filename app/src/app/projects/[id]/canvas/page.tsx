@@ -5,6 +5,7 @@ import { useCoAgent } from '@copilotkit/react-core'
 import { ProjectCanvas } from '@/components/project-canvas'
 import { useCanvasData, updateFieldValue, ExtractedBrief } from '@/hooks/use-canvas-data'
 import { useBriefSync } from '@/hooks/use-brief-sync'
+import { useAuth } from '@/components/providers/AuthProvider'
 import type { TabId, AllFields, ProjectType, CanvasField, IntegrationStatus } from '@/components/project-canvas/types'
 import type { TFProjectWithBrief, TFBrief } from '@/lib/supabase/types'
 
@@ -121,6 +122,7 @@ export default function ProjectCanvasPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const { tfUser } = useAuth()
 
   // Local state for unsaved changes and field overrides
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -340,8 +342,7 @@ export default function ProjectCanvasPage({
 
   // Handle setup integrations (lean workflow - Slack + Nextcloud + Drive in one call)
   const handleSetupIntegrations = useCallback(async () => {
-    // TODO: Replace with actual auth context when implemented
-    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+    const userEmail = tfUser?.email || ''
 
     try {
       const response = await fetch(`/api/projects/${id}`, {
@@ -373,8 +374,7 @@ export default function ProjectCanvasPage({
 
   // Handle sync brief to Nextcloud (lean workflow)
   const handleSyncBrief = useCallback(async () => {
-    // TODO: Replace with actual auth context when implemented
-    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+    const userEmail = tfUser?.email || ''
 
     try {
       const response = await fetch(`/api/projects/${id}`, {

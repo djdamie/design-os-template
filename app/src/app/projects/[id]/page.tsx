@@ -6,6 +6,7 @@ import { Role, TextMessage } from '@copilotkit/runtime-client-gql'
 import { BriefWorkspace } from '@/components/brief-workspace'
 import { useCanvasData, updateFieldValue, ExtractedBrief } from '@/hooks/use-canvas-data'
 import { useTeamMembers } from '@/hooks/use-team-members'
+import { useAuth } from '@/components/providers/AuthProvider'
 import type { AllFields, ProjectType, TabId, CanvasField } from '@/components/project-canvas/types'
 import type { ChatMessage, SuggestionChip } from '@/components/brief-extraction/types'
 import type { TFProjectWithBrief } from '@/lib/supabase/types'
@@ -151,6 +152,9 @@ export default function BriefWorkspacePage({
   const [fetchedProjectData, setFetchedProjectData] = useState<TFProjectWithBrief | null>(null)
   const [isLoadingProject, setIsLoadingProject] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+
+  // Auth context for user email
+  const { tfUser } = useAuth()
 
   // Real team members from database
   const { teamMembers } = useTeamMembers()
@@ -468,8 +472,7 @@ export default function BriefWorkspacePage({
 
   // Handle setup integrations (lean workflow - Slack + Nextcloud + Drive in one call)
   const handleSetupIntegrations = useCallback(async () => {
-    // TODO: Replace with actual auth context when implemented
-    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+    const userEmail = tfUser?.email || ''
 
     try {
       const response = await fetch(`/api/projects/${id}`, {
@@ -501,8 +504,7 @@ export default function BriefWorkspacePage({
 
   // Handle sync brief to Nextcloud (lean workflow)
   const handleSyncBrief = useCallback(async () => {
-    // TODO: Replace with actual auth context when implemented
-    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+    const userEmail = tfUser?.email || ''
 
     try {
       const response = await fetch(`/api/projects/${id}`, {

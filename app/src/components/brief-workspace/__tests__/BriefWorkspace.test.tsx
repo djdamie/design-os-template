@@ -121,7 +121,9 @@ const mockIntegrationStatus = {
     folderPath: null,
     folderUrl: null,
     connectedAt: null,
+    lastSyncedAt: null,
   },
+  allSetUp: false,
 }
 
 const mockClassificationReasoning = {

@@ -157,11 +157,21 @@ export interface NextcloudIntegration {
   folderPath: string | null
   folderUrl: string | null
   connectedAt: string | null
+  lastSyncedAt: string | null
+}
+
+export interface GoogleDriveIntegration {
+  connected: boolean
+  briefUrl: string | null
+  connectedAt: string | null
 }
 
 export interface IntegrationStatus {
   slack: SlackIntegration
   nextcloud: NextcloudIntegration
+  googleDrive?: GoogleDriveIntegration
+  /** Whether all integrations have been set up via the lean workflow */
+  allSetUp: boolean
 }
 
 export interface ClassificationReasoning {
@@ -204,9 +214,13 @@ export interface ProjectCanvasProps {
   onTypeOverride?: (newType: ProjectType | null) => void
   /** Called when user saves changes */
   onSave?: () => void
-  /** Called when user clicks Create Slack Channel */
+  /** NEW: Called when user clicks Setup Project (sets up all integrations) */
+  onSetupIntegrations?: () => void
+  /** NEW: Called when user clicks Sync to Nextcloud */
+  onSyncBrief?: () => void
+  /** @deprecated Use onSetupIntegrations instead */
   onCreateSlack?: () => void
-  /** Called when user clicks Create Nextcloud Folder */
+  /** @deprecated Use onSetupIntegrations instead */
   onCreateNextcloud?: () => void
   /** Called when user clicks completeness bar to see breakdown */
   onShowMissingFields?: () => void
@@ -255,8 +269,16 @@ export interface CompletenessBarProps {
 export interface ActionFooterProps {
   hasUnsavedChanges: boolean
   integrationStatus: IntegrationStatus
+  /** Whether setup/sync operations are in progress */
+  isLoading?: boolean
   onSave?: () => void
+  /** NEW: Set up all integrations at once (Slack + Nextcloud + Drive) */
+  onSetupIntegrations?: () => void
+  /** NEW: Sync brief to Nextcloud manually */
+  onSyncBrief?: () => void
+  /** @deprecated Use onSetupIntegrations instead */
   onCreateSlack?: () => void
+  /** @deprecated Use onSetupIntegrations instead */
   onCreateNextcloud?: () => void
 }
 

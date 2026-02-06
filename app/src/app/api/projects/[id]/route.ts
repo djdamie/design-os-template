@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/client'
-import { N8N_ENDPOINTS, callN8NWebhook } from '@/lib/n8n/client'
+import {
+  N8N_ENDPOINTS,
+  callN8NWebhook,
+  triggerProjectSetup,
+  triggerBriefSync,
+} from '@/lib/n8n/client'
 import type { TFBrief } from '@/lib/supabase/types'
 
 // Month name to number mapping
@@ -299,6 +304,115 @@ export async function POST(
 
     // Handle different actions
     switch (body.action) {
+      // ========================================================================
+      // NEW LEAN WORKFLOWS - Recommended
+      // ========================================================================
+
+      case 'setup_integrations': {
+        // New lean workflow: Sets up Slack, Nextcloud, Drive after app created case
+        // n8n fetches all data from DB - we just send IDs
+        const userEmail = body.user_email || body.email || 'unknown@tracksandfields.com'
+
+        const result = await triggerProjectSetup(id, userEmail)
+
+        if (!result.success) {
+          await logActivity(
+            supabase,
+            id,
+            'integrations_setup_failed',
+            result.error || 'Failed to set up integrations',
+            body.user_id,
+            { error: result.error },
+            'n8n'
+          )
+          return NextResponse.json(
+            { error: result.error || 'Failed to set up integrations' },
+            { status: 500 }
+          )
+        }
+
+        // Update case with integration results
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+        if (result.slack_channel_id) updates.slack_channel_id = result.slack_channel_id
+        if (result.slack_channel_name) updates.slack_channel = result.slack_channel_name
+        if (result.nextcloud_folder_url) updates.nextcloud_folder = result.nextcloud_folder_url
+
+        if (Object.keys(updates).length > 1) {
+          await supabase.from('tf_cases').update(updates).eq('id', id)
+        }
+
+        await logActivity(
+          supabase,
+          id,
+          'integrations_setup_complete',
+          'Project integrations set up (Slack, Nextcloud, Drive)',
+          body.user_id,
+          {
+            slack_channel: result.slack_channel_name,
+            nextcloud_folder: result.nextcloud_folder_url,
+            google_drive: result.google_drive_brief_url,
+          },
+          'n8n'
+        )
+
+        return NextResponse.json({
+          success: true,
+          slack_channel: result.slack_channel_name,
+          slack_channel_id: result.slack_channel_id,
+          nextcloud_folder: result.nextcloud_folder_url,
+          google_drive_url: result.google_drive_brief_url,
+        })
+      }
+
+      case 'sync_brief': {
+        // New lean workflow: Syncs brief to Nextcloud and notifies Slack
+        const changeSummary = body.change_summary || 'Brief updated'
+        const changedBy = body.changed_by || body.user_email || 'unknown'
+
+        const result = await triggerBriefSync(id, changeSummary, changedBy)
+
+        if (!result.success) {
+          await logActivity(
+            supabase,
+            id,
+            'brief_sync_failed',
+            result.error || 'Failed to sync brief',
+            body.user_id,
+            { error: result.error },
+            'n8n'
+          )
+          return NextResponse.json(
+            { error: result.error || 'Failed to sync brief' },
+            { status: 500 }
+          )
+        }
+
+        await logActivity(
+          supabase,
+          id,
+          'brief_synced',
+          `Brief synced to Nextcloud (v${result.version || 'unknown'})`,
+          body.user_id,
+          {
+            version: result.version,
+            nextcloud_url: result.nextcloud_current_url,
+            change_summary: changeSummary,
+          },
+          'n8n'
+        )
+
+        return NextResponse.json({
+          success: true,
+          version: result.version,
+          nextcloud_url: result.nextcloud_current_url,
+          nextcloud_versioned_url: result.nextcloud_versioned_url,
+        })
+      }
+
+      // ========================================================================
+      // LEGACY ACTIONS - Deprecated, use setup_integrations instead
+      // ========================================================================
+
       case 'create_slack_channel': {
         const payload = {
           action: 'create_slack_channel',

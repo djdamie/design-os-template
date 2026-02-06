@@ -1,11 +1,12 @@
 'use client'
 
-import { use, useState, useCallback, useEffect } from 'react'
+import { use, useState, useCallback, useEffect, useRef } from 'react'
 import { useCoAgent } from '@copilotkit/react-core'
 import { ProjectCanvas } from '@/components/project-canvas'
 import { useCanvasData, updateFieldValue, ExtractedBrief } from '@/hooks/use-canvas-data'
-import type { TabId, AllFields, ProjectType, CanvasField } from '@/components/project-canvas/types'
-import type { TFProjectWithBrief } from '@/lib/supabase/types'
+import { useBriefSync } from '@/hooks/use-brief-sync'
+import type { TabId, AllFields, ProjectType, CanvasField, IntegrationStatus } from '@/components/project-canvas/types'
+import type { TFProjectWithBrief, TFBrief } from '@/lib/supabase/types'
 
 function transformSupabaseToBrief(data: TFProjectWithBrief): ExtractedBrief | null {
   const brief = Array.isArray(data.tf_briefs) ? data.tf_briefs[0] : data.tf_briefs
@@ -135,12 +136,39 @@ export default function ProjectCanvasPage({
     },
   })
 
+  // Store setState in a ref to avoid infinite loops in useEffect.
+  // The setState from useCoAgent may not be stable across renders.
+  const setStateRef = useRef(setState)
+  useEffect(() => {
+    setStateRef.current = setState
+  }, [setState])
+
   const [fetchedProjectData, setFetchedProjectData] = useState<TFProjectWithBrief | null>(null)
   const [fetchedBrief, setFetchedBrief] = useState<ExtractedBrief | null>(null)
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
 
+  // Subscribe to realtime brief updates (e.g., from Slack)
+  const briefSyncState = useBriefSync({
+    caseId: id,
+    enabled: true,
+    onBriefUpdate: useCallback((updatedBrief: TFBrief, source: string) => {
+      console.log(`Brief updated from ${source}:`, updatedBrief)
+      // Use functional update to avoid dependency cycle
+      setFetchedProjectData(prev => {
+        if (!prev) return prev
+        const updated = { ...prev, tf_briefs: updatedBrief }
+        // Update fetchedBrief in the same callback to avoid stale closure
+        setFetchedBrief(transformSupabaseToBrief(updated))
+        return updated
+      })
+    }, []), // Empty deps - uses functional state update
+  })
+
+  // Keep current project id in agent state without forcing redundant updates.
   useEffect(() => {
-    if (!setState) return
-    setState((prev) => {
+    const setStateFn = setStateRef.current
+    if (!setStateFn) return
+    setStateFn((prev) => {
       const previous = prev || EMPTY_AGENT_STATE
       if (previous.current_project_id === id) {
         return previous
@@ -156,10 +184,11 @@ export default function ProjectCanvasPage({
         current_project_id: id,
       }
     })
-  }, [id, setState])
+  }, [id])
 
   useEffect(() => {
-    if (!setState || !fetchedProjectData) return
+    const setStateFn = setStateRef.current
+    if (!setStateFn || !fetchedProjectData) return
 
     const fetchedCompleteness = fetchedProjectData.tf_briefs
       ? (Array.isArray(fetchedProjectData.tf_briefs)
@@ -168,7 +197,7 @@ export default function ProjectCanvasPage({
       : 0
     const fetchedBriefData = transformSupabaseToBrief(fetchedProjectData)
 
-    setState((prev) => {
+    setStateFn((prev) => {
       const previous = prev || EMPTY_AGENT_STATE
       const isSameProject = previous.current_project_id === id
       const hasExistingBrief =
@@ -200,7 +229,7 @@ export default function ProjectCanvasPage({
         current_project_id: id,
       }
     })
-  }, [id, fetchedProjectData, setState])
+  }, [id, fetchedProjectData])
 
   useEffect(() => {
     async function fetchProjectMetadata() {
@@ -309,8 +338,71 @@ export default function ProjectCanvasPage({
     }
   }, [id, effectiveFields, projectTypeOverride])
 
-  // Handle Slack channel creation
+  // Handle setup integrations (lean workflow - Slack + Nextcloud + Drive in one call)
+  const handleSetupIntegrations = useCallback(async () => {
+    // TODO: Replace with actual auth context when implemented
+    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+
+    try {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'setup_integrations',
+          user_email: userEmail,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to setup integrations')
+      }
+
+      // Update local state with new integration data
+      setFetchedProjectData((prev) => prev ? {
+        ...prev,
+        slack_channel: result.slack_channel || prev.slack_channel || null,
+        nextcloud_folder: result.nextcloud_folder || prev.nextcloud_folder || null,
+      } : prev)
+
+      console.log('Integrations setup complete:', result)
+    } catch (error) {
+      console.error('Failed to setup integrations:', error)
+    }
+  }, [id])
+
+  // Handle sync brief to Nextcloud (lean workflow)
+  const handleSyncBrief = useCallback(async () => {
+    // TODO: Replace with actual auth context when implemented
+    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+
+    try {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync_brief',
+          change_summary: 'Manual sync from canvas',
+          changed_by: userEmail,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to sync brief')
+      }
+
+      // Update last synced timestamp
+      setLastSyncedAt(new Date().toISOString())
+      console.log('Brief synced to Nextcloud:', result)
+    } catch (error) {
+      console.error('Failed to sync brief:', error)
+    }
+  }, [id])
+
+  // DEPRECATED: Handle Slack channel creation (kept for backwards compatibility)
   const handleCreateSlack = useCallback(async () => {
+    console.warn('handleCreateSlack is deprecated. Use handleSetupIntegrations instead.')
     try {
       const response = await fetch(`/api/projects/${id}`, {
         method: 'POST',
@@ -336,8 +428,9 @@ export default function ProjectCanvasPage({
     }
   }, [id, effectiveFields, canvasData.project])
 
-  // Handle Nextcloud folder creation
+  // DEPRECATED: Handle Nextcloud folder creation (kept for backwards compatibility)
   const handleCreateNextcloud = useCallback(async () => {
+    console.warn('handleCreateNextcloud is deprecated. Use handleSetupIntegrations instead.')
     try {
       const response = await fetch(`/api/projects/${id}`, {
         method: 'POST',
@@ -380,6 +473,17 @@ export default function ProjectCanvasPage({
     ? { ...canvasData.project, projectTypeOverride }
     : canvasData.project
 
+  // Compute integration status with lastSyncedAt
+  const integrationStatus: IntegrationStatus = {
+    ...canvasData.integrationStatus,
+    nextcloud: {
+      ...canvasData.integrationStatus.nextcloud,
+      lastSyncedAt: lastSyncedAt || canvasData.integrationStatus.nextcloud.lastSyncedAt || null,
+    },
+    allSetUp: canvasData.integrationStatus.slack.connected &&
+              canvasData.integrationStatus.nextcloud.connected,
+  }
+
   return (
     <ProjectCanvas
       project={projectWithOverride}
@@ -388,15 +492,15 @@ export default function ProjectCanvasPage({
       tabs={canvasData.tabs}
       fields={effectiveFields}
       teamMembers={canvasData.teamMembers}
-      integrationStatus={canvasData.integrationStatus}
+      integrationStatus={integrationStatus}
       classificationReasoning={canvasData.classificationReasoning}
       hasUnsavedChanges={hasUnsavedChanges}
       onTabChange={handleTabChange}
       onFieldUpdate={handleFieldUpdate}
       onTypeOverride={handleTypeOverride}
       onSave={handleSave}
-      onCreateSlack={handleCreateSlack}
-      onCreateNextcloud={handleCreateNextcloud}
+      onSetupIntegrations={handleSetupIntegrations}
+      onSyncBrief={handleSyncBrief}
       onShowMissingFields={handleShowMissingFields}
       onShowClassificationDetails={handleShowClassificationDetails}
     />

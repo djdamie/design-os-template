@@ -253,9 +253,11 @@ export function useCanvasData(
           folderPath: nextcloudFolder,
           folderUrl: nextcloudFolder?.startsWith('http') ? nextcloudFolder : null,
           connectedAt: nextcloudFolder ? new Date().toISOString() : null,
+          lastSyncedAt: null,
         },
+        allSetUp: !!slackChannel && !!nextcloudFolder,
       }
-      
+
       return {
         project: {
           ...sampleData.project,
@@ -403,9 +405,11 @@ export function useCanvasData(
         folderPath: nextcloudFolder,
         folderUrl: nextcloudFolder?.startsWith('http') ? nextcloudFolder : null,
         connectedAt: nextcloudFolder ? new Date().toISOString() : null,
+        lastSyncedAt: null,
       },
+      allSetUp: !!slackChannel && !!nextcloudFolder,
     }
-    
+
     const project: Project = {
       ...sampleData.project,
       id: projectId,

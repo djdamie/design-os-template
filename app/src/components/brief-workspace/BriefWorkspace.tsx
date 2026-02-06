@@ -28,6 +28,8 @@ export function BriefWorkspace({
   onFieldUpdate,
   onTypeOverride,
   onSave,
+  onSetupIntegrations,
+  onSyncBrief,
   onCreateSlack,
   onCreateNextcloud,
   onShowMissingFields,
@@ -63,6 +65,8 @@ export function BriefWorkspace({
             onFieldUpdate={onFieldUpdate}
             onTypeOverride={onTypeOverride as ((newType: ProjectType | null) => void) | undefined}
             onSave={onSave}
+            onSetupIntegrations={onSetupIntegrations}
+            onSyncBrief={onSyncBrief}
             onCreateSlack={onCreateSlack}
             onCreateNextcloud={onCreateNextcloud}
             onShowMissingFields={onShowMissingFields}

@@ -59,7 +59,11 @@ export interface BriefWorkspaceProps {
   onFieldUpdate?: (fieldId: string, value: unknown) => void
   onTypeOverride?: (newType: ProjectType | null) => void
   onSave?: () => void
+  onSetupIntegrations?: () => Promise<void> | void
+  onSyncBrief?: () => Promise<void> | void
+  /** @deprecated Use onSetupIntegrations instead */
   onCreateSlack?: () => void
+  /** @deprecated Use onSetupIntegrations instead */
   onCreateNextcloud?: () => void
   onShowMissingFields?: () => void
   onShowClassificationDetails?: () => void

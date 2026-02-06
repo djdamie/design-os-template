@@ -461,7 +461,67 @@ export default function BriefWorkspacePage({
     }
   }, [id, effectiveFields, projectTypeOverride])
 
-  // Handle Slack channel creation
+  // Handle setup integrations (lean workflow - Slack + Nextcloud + Drive in one call)
+  const handleSetupIntegrations = useCallback(async () => {
+    // TODO: Replace with actual auth context when implemented
+    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+
+    try {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'setup_integrations',
+          user_email: userEmail,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to setup integrations')
+      }
+
+      // Update local state with new integration data
+      setFetchedProjectData((prev) => prev ? {
+        ...prev,
+        slack_channel: result.slack_channel || prev.slack_channel || null,
+        nextcloud_folder: result.nextcloud_folder || prev.nextcloud_folder || null,
+      } : prev)
+
+      console.log('Integrations setup complete:', result)
+    } catch (error) {
+      console.error('Failed to setup integrations:', error)
+    }
+  }, [id])
+
+  // Handle sync brief to Nextcloud (lean workflow)
+  const handleSyncBrief = useCallback(async () => {
+    // TODO: Replace with actual auth context when implemented
+    const userEmail = process.env.NEXT_PUBLIC_DEFAULT_USER_EMAIL || 'damian@tracksandfields.com'
+
+    try {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync_brief',
+          change_summary: 'Manual sync from brief workspace',
+          changed_by: userEmail,
+        }),
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to sync brief')
+      }
+
+      console.log('Brief synced to Nextcloud:', result)
+    } catch (error) {
+      console.error('Failed to sync brief:', error)
+    }
+  }, [id])
+
+  // Handle Slack channel creation (deprecated - use handleSetupIntegrations)
   const handleCreateSlack = useCallback(async () => {
     try {
       const response = await fetch(`/api/projects/${id}`, {
@@ -624,6 +684,8 @@ export default function BriefWorkspacePage({
       onFieldUpdate={handleFieldUpdate}
       onTypeOverride={handleTypeOverride}
       onSave={handleSave}
+      onSetupIntegrations={handleSetupIntegrations}
+      onSyncBrief={handleSyncBrief}
       onCreateSlack={handleCreateSlack}
       onCreateNextcloud={handleCreateNextcloud}
       onShowMissingFields={handleShowMissingFields}

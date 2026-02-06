@@ -174,7 +174,8 @@ export function createDefaultTeamMembers(): TeamMemberOption[] {
 export function createDefaultIntegrationStatus(): IntegrationStatus {
   return {
     slack: { connected: false, channelName: null, channelUrl: null, connectedAt: null },
-    nextcloud: { connected: false, folderPath: null, folderUrl: null, connectedAt: null },
+    nextcloud: { connected: false, folderPath: null, folderUrl: null, connectedAt: null, lastSyncedAt: null },
+    allSetUp: false,
   }
 }
 

@@ -22,12 +22,16 @@ export function ProjectCanvas({
   onFieldUpdate,
   onTypeOverride,
   onSave,
+  onSetupIntegrations,
+  onSyncBrief,
+  // Deprecated props - kept for backwards compatibility
   onCreateSlack,
   onCreateNextcloud,
   onShowMissingFields,
   onShowClassificationDetails,
-}: ProjectCanvasProps) {
+}: ProjectCanvasProps & { isIntegrationLoading?: boolean }) {
   const [activeTab, setActiveTab] = useState<TabId>(initialActiveTab)
+  const [isIntegrationLoading, setIsIntegrationLoading] = useState(false)
 
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId)
@@ -80,9 +84,24 @@ export function ProjectCanvas({
       <ActionFooter
         hasUnsavedChanges={hasUnsavedChanges}
         integrationStatus={integrationStatus}
+        isLoading={isIntegrationLoading}
         onSave={onSave}
-        onCreateSlack={onCreateSlack}
-        onCreateNextcloud={onCreateNextcloud}
+        onSetupIntegrations={onSetupIntegrations ? async () => {
+          setIsIntegrationLoading(true)
+          try {
+            await onSetupIntegrations()
+          } finally {
+            setIsIntegrationLoading(false)
+          }
+        } : undefined}
+        onSyncBrief={onSyncBrief ? async () => {
+          setIsIntegrationLoading(true)
+          try {
+            await onSyncBrief()
+          } finally {
+            setIsIntegrationLoading(false)
+          }
+        } : undefined}
       />
     </div>
   )

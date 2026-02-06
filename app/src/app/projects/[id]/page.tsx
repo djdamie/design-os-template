@@ -5,6 +5,7 @@ import { useCoAgent, useCopilotChat, useCopilotReadable } from '@copilotkit/reac
 import { Role, TextMessage } from '@copilotkit/runtime-client-gql'
 import { BriefWorkspace } from '@/components/brief-workspace'
 import { useCanvasData, updateFieldValue, ExtractedBrief } from '@/hooks/use-canvas-data'
+import { useTeamMembers } from '@/hooks/use-team-members'
 import type { AllFields, ProjectType, TabId, CanvasField } from '@/components/project-canvas/types'
 import type { ChatMessage, SuggestionChip } from '@/components/brief-extraction/types'
 import type { TFProjectWithBrief } from '@/lib/supabase/types'
@@ -150,6 +151,9 @@ export default function BriefWorkspacePage({
   const [fetchedProjectData, setFetchedProjectData] = useState<TFProjectWithBrief | null>(null)
   const [isLoadingProject, setIsLoadingProject] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+
+  // Real team members from database
+  const { teamMembers } = useTeamMembers()
 
   // Local state for unsaved changes and field overrides
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -333,7 +337,8 @@ export default function BriefWorkspacePage({
       catchy_case_id: fetchedProjectData.catchy_case_id,
       slack_channel: fetchedProjectData.slack_channel,
       nextcloud_folder: fetchedProjectData.nextcloud_folder,
-    } : null
+    } : null,
+    teamMembers
   )
 
   // Use local fields if modified, otherwise use computed fields

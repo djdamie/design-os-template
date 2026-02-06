@@ -13,11 +13,11 @@ import {
   calculateMargin,
   createCompleteness,
   createDefaultTabs,
-  createDefaultTeamMembers,
   createDefaultIntegrationStatus,
   createClassificationReasoning,
   type FlatExtractedBrief,
 } from '@/lib/brief-to-canvas'
+import { useTeamMembers } from '@/hooks/use-team-members'
 
 // LangGraph message format from AG-UI
 interface LangGraphMessage {
@@ -149,7 +149,7 @@ export default function NewProjectPage() {
 
   // Static data
   const tabs = createDefaultTabs()
-  const teamMembers = createDefaultTeamMembers()
+  const { teamMembers } = useTeamMembers()
   const integrationStatus = createDefaultIntegrationStatus()
 
   // Check if brief has changed since last save (detects agent-initiated changes)

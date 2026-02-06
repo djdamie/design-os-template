@@ -159,18 +159,6 @@ export function createDefaultTabs(): CanvasTab[] {
   ]
 }
 
-export function createDefaultTeamMembers(): TeamMemberOption[] {
-  return [
-    { id: 'user-001', name: 'Julia Richter', role: 'Managing Director', avatar: null },
-    { id: 'user-002', name: 'Lisa Weber', role: 'Account Manager', avatar: null },
-    { id: 'user-003', name: 'Max Fischer', role: 'Senior Music Supervisor', avatar: null },
-    { id: 'user-004', name: 'Anna Schmidt', role: 'Project Manager', avatar: null },
-    { id: 'user-005', name: 'Thomas Müller', role: 'Business Affairs', avatar: null },
-    { id: 'user-006', name: 'Sarah Klein', role: 'Music Coordinator', avatar: null },
-    { id: 'user-007', name: 'David Braun', role: 'Junior Music Supervisor', avatar: null },
-  ]
-}
-
 export function createDefaultIntegrationStatus(): IntegrationStatus {
   return {
     slack: { connected: false, channelName: null, channelUrl: null, connectedAt: null },

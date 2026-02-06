@@ -33,6 +33,7 @@ export interface N8NWebhookResponse {
   nextcloud_url?: string
   google_drive_url?: string
   error?: string
+  raw_response?: string
 }
 
 export interface ProjectSetupResponse extends N8NWebhookResponse {

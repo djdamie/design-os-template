@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { AppShell, type NavItem, type ProjectContext, type ChatMessage } from '@/components/shell'
+import { useAuth } from './AuthProvider'
 
 interface ShellProviderProps {
   children: React.ReactNode
@@ -82,11 +83,26 @@ export function ShellProvider({ children }: ShellProviderProps) {
     ]
   }, [pathname, projectContext])
 
-  // Mock user (will be replaced with Supabase auth)
-  const user = {
-    name: 'Music Supervisor',
-    email: 'ms@trackfinder.io',
-    role: 'Music Supervisor',
+  // Real user from auth context
+  const { tfUser, signOut, loading: authLoading } = useAuth()
+
+  const user = tfUser
+    ? {
+        name: tfUser.name,
+        email: tfUser.email,
+        role: tfUser.role,
+        avatarUrl: tfUser.avatar_url || undefined,
+      }
+    : {
+        name: 'Loading...',
+        email: '',
+        role: '',
+      }
+
+  // Skip shell on login page
+  const isLoginPage = pathname === '/login'
+  if (isLoginPage) {
+    return <>{children}</>
   }
 
   // Navigation handlers
@@ -94,9 +110,9 @@ export function ShellProvider({ children }: ShellProviderProps) {
     router.push(href)
   }
 
-  const handleLogout = () => {
-    // Will be implemented with Supabase auth
-    console.log('Logout clicked')
+  const handleLogout = async () => {
+    await signOut()
+    router.push('/login')
   }
 
   const handleNewProject = () => {

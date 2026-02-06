@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createServiceClient } from '@/lib/supabase/client'
 import { N8N_ENDPOINTS, callN8NWebhook } from '@/lib/n8n/client'
 import type { TFProjectWithBrief, TFCaseActivity } from '@/lib/supabase/types'
 import type {
@@ -294,7 +294,7 @@ async function triggerProjectAction(request: NextRequest, projectId: string, act
 
 export async function GET() {
   try {
-    const supabase = createServerClient()
+    const supabase = createServiceClient()
     const [projectsResult, activityResult] = await Promise.all([
       supabase
         .from('tf_cases')
@@ -351,7 +351,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = createServerClient()
+    const supabase = createServiceClient()
 
     if (body.action === 'sync_service') {
       const serviceId = body.serviceId as ServiceId

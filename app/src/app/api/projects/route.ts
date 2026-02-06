@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createServiceClient } from '@/lib/supabase/client'
 
 // GET /api/projects - List all projects
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerClient()
+    const supabase = createServiceClient()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const limit = parseInt(searchParams.get('limit') || '50')
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = createServerClient()
+    const supabase = createServiceClient()
 
     // Generate a case number (simple version - can be enhanced)
     const timestamp = Date.now().toString(36).toUpperCase()

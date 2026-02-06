@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
-import { ShellProvider, CopilotProvider } from "@/components/providers";
+import { AuthProvider, ShellProvider, CopilotProvider } from "@/components/providers";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -30,9 +30,11 @@ export default function RootLayout({
       <body
         className={`${dmSans.variable} ${ibmPlexMono.variable} antialiased`}
       >
-        <CopilotProvider>
-          <ShellProvider>{children}</ShellProvider>
-        </CopilotProvider>
+        <AuthProvider>
+          <CopilotProvider>
+            <ShellProvider>{children}</ShellProvider>
+          </CopilotProvider>
+        </AuthProvider>
       </body>
     </html>
   );

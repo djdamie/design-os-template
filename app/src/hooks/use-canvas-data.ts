@@ -215,7 +215,8 @@ export function useCanvasData(
     catchy_case_id?: string | null
     slack_channel?: string | null
     nextcloud_folder?: string | null
-  } | null
+  } | null,
+  teamMembersOverride?: TeamMemberOption[]
 ): CanvasData {
   // Memoize the brief key to prevent expensive JSON.stringify on every render.
   // Only recalculate when the extractedBrief reference changes.
@@ -270,7 +271,7 @@ export function useCanvasData(
         completenessBreakdown: sampleData.completenessBreakdown,
         tabs: sampleData.tabs,
         fields: sampleData.fields,
-        teamMembers: sampleData.teamMembers,
+        teamMembers: teamMembersOverride || sampleData.teamMembers,
         integrationStatus,
         classificationReasoning: sampleData.classificationReasoning,
       }
@@ -426,7 +427,7 @@ export function useCanvasData(
       completenessBreakdown,
       tabs,
       fields: mergedFields,
-      teamMembers: sampleData.teamMembers,
+      teamMembers: teamMembersOverride || sampleData.teamMembers,
       integrationStatus,
       classificationReasoning,
     }
@@ -442,6 +443,7 @@ export function useCanvasData(
     projectMetadata?.catchy_case_id,
     projectMetadata?.slack_channel,
     projectMetadata?.nextcloud_folder,
+    teamMembersOverride,
   ])
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createServiceClient } from '@/lib/supabase/client'
 import {
   N8N_ENDPOINTS,
   callN8NWebhook,
@@ -113,7 +113,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const supabase = createServerClient()
+    const supabase = createServiceClient()
 
     const { data, error } = await supabase
       .from('tf_cases')
@@ -146,7 +146,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const supabase = createServerClient()
+    const supabase = createServiceClient()
 
     // Extract brief fields from the request body
     const briefUpdate: Partial<TFBrief> = {
@@ -277,7 +277,7 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json()
-    const supabase = createServerClient()
+    const supabase = createServiceClient()
 
     const { data: projectData, error: projectError } = await supabase
       .from('tf_cases')
@@ -542,7 +542,7 @@ export async function POST(
 
 // Helper function to log activity
 async function logActivity(
-  supabase: ReturnType<typeof createServerClient>,
+  supabase: ReturnType<typeof createServiceClient>,
   caseId: string,
   activityType: string,
   description: string,

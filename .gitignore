@@ -8,6 +8,13 @@ node_modules/
 # Build output
 dist/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
 # IDE
 .idea/
 *.swp

@@ -21,6 +21,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string, role?: string) => Promise<{ error: Error | null }>
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
+  resetPassword: (email: string) => Promise<{ error: Error | null }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -39,6 +40,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single()
 
     if (error) {
+      // PGRST116 = no row found — auto-create profile from auth user metadata
+      if (error.code === 'PGRST116') {
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (authUser) {
+          const { data: newProfile, error: insertError } = await supabase
+            .from('tf_users')
+            .insert({
+              id: authUser.id,
+              email: authUser.email!,
+              name: authUser.user_metadata?.name || authUser.email!.split('@')[0],
+              role: authUser.user_metadata?.role || 'Music Supervisor',
+            })
+            .select()
+            .single()
+
+          if (insertError) {
+            console.error('Error auto-creating TF user profile:', insertError)
+            return null
+          }
+          return newProfile as TFUser
+        }
+      }
       console.error('Error fetching TF user profile:', error)
       return null
     }
@@ -104,8 +127,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.error('Sign out error:', e)
+    }
+    setUser(null)
+    setSession(null)
     setTFUser(null)
+  }
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset-password`,
+    })
+    return { error: error as Error | null }
   }
 
   return (
@@ -118,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signInWithGoogle,
       signOut,
+      resetPassword,
     }}>
       {children}
     </AuthContext.Provider>

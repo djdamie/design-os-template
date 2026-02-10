@@ -84,8 +84,9 @@ export function ShellProvider({ children }: ShellProviderProps) {
   }, [pathname, projectContext])
 
   // Real user from auth context
-  const { tfUser, signOut, loading: authLoading } = useAuth()
+  const { user: authUser, tfUser, signOut, loading: authLoading } = useAuth()
 
+  // Use tfUser when available, fall back to auth user metadata, or undefined (hides UserMenu)
   const user = tfUser
     ? {
         name: tfUser.name,
@@ -93,15 +94,17 @@ export function ShellProvider({ children }: ShellProviderProps) {
         role: tfUser.role,
         avatarUrl: tfUser.avatar_url || undefined,
       }
-    : {
-        name: 'Loading...',
-        email: '',
-        role: '',
-      }
+    : authUser
+      ? {
+          name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'User',
+          email: authUser.email || '',
+          role: '',
+        }
+      : undefined
 
-  // Skip shell on login page
-  const isLoginPage = pathname === '/login'
-  if (isLoginPage) {
+  // Skip shell on auth pages (login, password reset)
+  const isAuthPage = pathname === '/login' || pathname.startsWith('/auth/reset-password')
+  if (isAuthPage) {
     return <>{children}</>
   }
 

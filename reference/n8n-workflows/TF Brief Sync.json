@@ -50,7 +50,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const d = $json;\nconst inputData = $(\"Parse Input\").item.json;\n\nconst folderPath = `/01 - Team share/Projects/BriefBot/${d.case_number} - ${d.catchy_case_id}`;\n\nfunction arr(a) { return Array.isArray(a) && a.length ? a.join(\", \") : \"-\"; }\nfunction formatDate(dt) { return dt ? new Date(dt).toLocaleDateString(\"en-GB\", { day: \"numeric\", month: \"short\", year: \"numeric\" }) : \"-\"; }\nfunction list(a) { \n  if (!Array.isArray(a) || !a.length) return \"-\";\n  return a.map(x => {\n    if (typeof x === \"string\") return `- ${x}`;\n    return `- ${x.artist || x.field || x.name || \"Item\"}: ${x.title || x.question || x.reason || x.notes || \"\"}`;\n  }).join(\"\\n\");\n}\n\nconst md = `# ${d.catchy_case_id || d.case_number} \\u2014 ${d.project_title || \"Untitled\"}\n\n**Case Number:** ${d.case_number}  \n**Updated:** ${new Date().toISOString().slice(0, 10)}  \n**Type:** ${d.project_type || \"TBD\"}  \n**Status:** ${d.status || \"Draft\"}  \n**Version:** ${d.version || 1}  \n**Completeness:** ${d.completion_rate || 0}%  \n**Changes:** ${inputData.change_summary}  \n**Changed by:** ${inputData.changed_by}  \n\n---\n\n## 1) Business Brief\n- **Client:** ${d.client || \"-\"}\n- **Agency:** ${d.agency || \"-\"}\n- **Brand:** ${d.brand || \"-\"}\n- **Media:** ${arr(d.media)}\n- **Term:** ${d.term || \"-\"}\n- **Territory:** ${arr(d.territory)}\n- **Budget:** ${d.budget_raw || \"-\"}\n- **Lengths:** ${arr(d.lengths)}\n- **Cutdowns:** ${arr(d.cutdowns)}\n\n## 2) Creative Brief\n- **Mood:** ${d.mood || \"-\"}\n- **Keywords:** ${arr(d.keywords)}\n- **Genres:** ${arr(d.genres)}\n- **Instruments:** ${arr(d.instruments)}\n- **Vocals:** ${d.vocals_preference || \"-\"}\n\n**Creative Direction:**  \n${d.creative_direction || \"-\"}\n\n**Reference Tracks:**\n${list(d.reference_tracks)}\n\n**Must Avoid:**  \n${d.must_avoid || \"-\"}\n\n**Lyrics Requirements:**  \n${d.lyrics_requirements || \"-\"}\n\n## 3) Contextual Brief\n- **Brand:** ${d.brand || \"-\"}\n- **Brand Values:** ${arr(d.brand_values)}\n- **Target Audience:** ${d.target_audience || \"-\"}\n\n**Campaign Context:**  \n${d.campaign_context || \"-\"}\n\n## 4) Technical Brief\n- **Lengths:** ${arr(d.lengths)}\n- **Cutdowns:** ${arr(d.cutdowns)}\n- **Stems Required:** ${d.stems_required ? \"Yes\" : \"No\"}\n- **Sync Points:** ${d.sync_points || \"-\"}\n\n## 5) Timeline & Deadlines\n| Milestone | Date |\n|-----------|------|\n| Submission Deadline | ${formatDate(d.submission_deadline)} |\n| First Presentation | ${formatDate(d.first_presentation_date)} |\n| PPM | ${formatDate(d.ppm_date)} |\n| Shoot | ${formatDate(d.shoot_date)} |\n| Offline | ${formatDate(d.offline_date)} |\n| Online | ${formatDate(d.online_date)} |\n| Air Date | ${formatDate(d.air_date)} |\n\n**Urgency:** ${d.deadline_urgency || \"Normal\"}\n\n---\n\n## Missing Information (${(d.missing_information || []).length})\n${list(d.missing_information)}\n\n## Extraction Notes\n${d.extraction_notes || \"-\"}\n\n---\n*Updated by TF Project Builder on ${new Date().toISOString()}*\n`;\n\nreturn { json: { ...d, brief_md: md, folderPath, change_summary: inputData.change_summary, changed_by: inputData.changed_by } };"
+        "jsCode": "const d = $json;\nconst inputData = $(\"Parse Input\").item.json;\n\nconst newVersion = (d.version || 1) + 1;\nconst folderPath = `/01 - Team share/Projects/BriefBot/${d.case_number} - ${d.catchy_case_id}`;\n\nfunction arr(a) { return Array.isArray(a) && a.length ? a.join(\", \") : \"-\"; }\nfunction formatDate(dt) { return dt ? new Date(dt).toLocaleDateString(\"en-GB\", { day: \"numeric\", month: \"short\", year: \"numeric\" }) : \"-\"; }\nfunction list(a) { \n  if (!Array.isArray(a) || !a.length) return \"-\";\n  return a.map(x => {\n    if (typeof x === \"string\") return `- ${x}`;\n    return `- ${x.artist || x.field || x.name || \"Item\"}: ${x.title || x.question || x.reason || x.notes || \"\"}`;\n  }).join(\"\\n\");\n}\n\nconst md = `# ${d.catchy_case_id || d.case_number} \\u2014 ${d.project_title || \"Untitled\"}\n\n**Case Number:** ${d.case_number}  \n**Updated:** ${new Date().toISOString().slice(0, 10)}  \n**Type:** ${d.project_type || \"TBD\"}  \n**Status:** ${d.status || \"Draft\"}  \n**Version:** ${newVersion}  \n**Completeness:** ${d.completion_rate || 0}%  \n**Changes:** ${inputData.change_summary}  \n**Changed by:** ${inputData.changed_by}  \n\n---\n\n## 1) Business Brief\n- **Client:** ${d.client || \"-\"}\n- **Agency:** ${d.agency || \"-\"}\n- **Brand:** ${d.brand || \"-\"}\n- **Media:** ${arr(d.media)}\n- **Term:** ${d.term || \"-\"}\n- **Territory:** ${arr(d.territory)}\n- **Budget:** ${d.budget_raw || \"-\"}\n- **Lengths:** ${arr(d.lengths)}\n- **Cutdowns:** ${arr(d.cutdowns)}\n\n## 2) Creative Brief\n- **Mood:** ${d.mood || \"-\"}\n- **Keywords:** ${arr(d.keywords)}\n- **Genres:** ${arr(d.genres)}\n- **Instruments:** ${arr(d.instruments)}\n- **Vocals:** ${d.vocals_preference || \"-\"}\n\n**Creative Direction:**  \n${d.creative_direction || \"-\"}\n\n**Reference Tracks:**\n${list(d.reference_tracks)}\n\n**Must Avoid:**  \n${d.must_avoid || \"-\"}\n\n**Lyrics Requirements:**  \n${d.lyrics_requirements || \"-\"}\n\n## 3) Contextual Brief\n- **Brand:** ${d.brand || \"-\"}\n- **Brand Values:** ${arr(d.brand_values)}\n- **Target Audience:** ${d.target_audience || \"-\"}\n\n**Campaign Context:**  \n${d.campaign_context || \"-\"}\n\n## 4) Technical Brief\n- **Lengths:** ${arr(d.lengths)}\n- **Cutdowns:** ${arr(d.cutdowns)}\n- **Stems Required:** ${d.stems_required ? \"Yes\" : \"No\"}\n- **Sync Points:** ${d.sync_points || \"-\"}\n\n## 5) Timeline & Deadlines\n| Milestone | Date |\n|-----------|------|\n| Submission Deadline | ${formatDate(d.submission_deadline)} |\n| First Presentation | ${formatDate(d.first_presentation_date)} |\n| PPM | ${formatDate(d.ppm_date)} |\n| Shoot | ${formatDate(d.shoot_date)} |\n| Offline | ${formatDate(d.offline_date)} |\n| Online | ${formatDate(d.online_date)} |\n| Air Date | ${formatDate(d.air_date)} |\n\n**Urgency:** ${d.deadline_urgency || \"Normal\"}\n\n---\n\n## Missing Information (${(d.missing_information || []).length})\n${list(d.missing_information)}\n\n## Extraction Notes\n${d.extraction_notes || \"-\"}\n\n---\n*Updated by TF Project Builder on ${new Date().toISOString()}*\n`;\n\nreturn { json: { ...d, brief_md: md, folderPath, newVersion, change_summary: inputData.change_summary, changed_by: inputData.changed_by } };"
       },
       "id": "render-brief-markdown",
       "name": "Render Brief Markdown",
@@ -61,7 +61,7 @@
     {
       "parameters": {
         "authentication": "oAuth2",
-        "path": "={{ $json.folderPath }}/{{ $json.project_title || 'Brief' }} - Brief - v{{ $json.version || 1 }}.md",
+        "path": "={{ $json.folderPath }}/{{ $json.project_title || 'Brief' }} - Brief - v{{ $json.newVersion }}.md",
         "fileContent": "={{ $json.brief_md }}"
       },
       "id": "upload-versioned-brief",
@@ -79,27 +79,44 @@
     },
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tf_briefs SET version = $1 WHERE case_id = $2::uuid",
+        "options": {
+          "queryReplacement": "={{ [$(\"Render Brief Markdown\").item.json.newVersion, $(\"Render Brief Markdown\").item.json.case_id] }}"
+        }
+      },
+      "id": "update-brief-version",
+      "name": "Update Brief Version",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1232, 304],
+      "credentials": {
+        "postgres": {
+          "id": "t517vaBV96cmsVhY",
+          "name": "damian_supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const d = $(\"Render Brief Markdown\").item.json;\n\nconst message = `:memo: *Brief Updated \\u2014 v${d.version || 1}*\\n\\n*${d.project_title || \"Project\"}* (${d.catchy_case_id || d.case_number})\\n\\n:pencil2: Changes: ${d.change_summary}\\n:bust_in_silhouette: By: ${d.changed_by}\\n:page_facing_up: Version: ${d.version || 1}\\n:clipboard: Completeness: ${d.completion_rate || 0}%\\n\\n:file_folder: Saved to Nextcloud as _${d.project_title || 'Brief'} - Brief - v${d.version || 1}.md_`;\n\nreturn {\n  json: {\n    slack_channel: d.slack_channel,\n    message: message,\n    case_id: d.case_id,\n    version: d.version || 1,\n    success: true\n  }\n};"
+        "jsCode": "const d = $(\"Render Brief Markdown\").item.json;\n\nconst message = `:memo: *Brief Updated \\u2014 v${d.newVersion}*\\n\\n*${d.project_title || \"Project\"}* (${d.catchy_case_id || d.case_number})\\n\\n:pencil2: Changes: ${d.change_summary}\\n:bust_in_silhouette: By: ${d.changed_by}\\n:page_facing_up: Version: ${d.newVersion}\\n:clipboard: Completeness: ${d.completion_rate || 0}%\\n\\n:file_folder: Saved to Nextcloud as _${d.project_title || 'Brief'} - Brief - v${d.newVersion}.md_`;\n\nreturn {\n  json: {\n    slack_channel: d.slack_channel,\n    message: message,\n    case_id: d.case_id,\n    version: d.newVersion,\n    success: true\n  }\n};"
       },
       "id": "build-slack-message",
       "name": "Build Slack Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1232, 304]
+      "position": [1440, 304]
     },
     {
       "parameters": {
         "authentication": "oAuth2",
-        "resource": "message",
-        "operation": "post",
         "select": "channel",
         "channelId": {
           "__rl": true,
           "value": "={{ $json.slack_channel }}",
           "mode": "name"
         },
-        "messageType": "text",
         "text": "={{ $json.message }}",
         "otherOptions": {
           "includeLinkToWorkflow": false
@@ -109,7 +126,7 @@
       "name": "Post to Slack",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.3,
-      "position": [1440, 304],
+      "position": [1648, 304],
       "webhookId": "26e70ec1-4b3e-424d-b170-b02c17f38a42",
       "credentials": {
         "slackOAuth2Api": {
@@ -129,7 +146,7 @@
       "name": "Respond Success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [1648, 304]
+      "position": [1856, 304]
     }
   ],
   "pinData": {},
@@ -147,6 +164,9 @@
       "main": [[{"node": "Upload Versioned Brief", "type": "main", "index": 0}]]
     },
     "Upload Versioned Brief": {
+      "main": [[{"node": "Update Brief Version", "type": "main", "index": 0}]]
+    },
+    "Update Brief Version": {
       "main": [[{"node": "Build Slack Message", "type": "main", "index": 0}]]
     },
     "Build Slack Message": {
@@ -166,7 +186,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": true
   },
-  "versionId": "ac321d33-8c34-4d36-8ad9-290013b1d2d0",
+  "versionId": "e487e7a4-6d06-4d4d-935e-011b842932f9",
   "meta": {
     "templateCredsSetupCompleted": true
   },

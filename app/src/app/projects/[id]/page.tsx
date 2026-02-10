@@ -188,6 +188,7 @@ export default function BriefWorkspacePage({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [localFields, setLocalFields] = useState<AllFields | null>(null)
   const [projectTypeOverride, setProjectTypeOverride] = useState<ProjectType | null>(null)
+  const modifiedFieldIds = useRef<Set<string>>(new Set())
 
   // CopilotKit hooks for bidirectional sync
   const { appendMessage, isLoading, visibleMessages } = useCopilotChat()
@@ -425,6 +426,7 @@ export default function BriefWorkspacePage({
         const currentFields = prev || canvasData.fields
         return updateFieldValue(currentFields, fieldId, value)
       })
+      modifiedFieldIds.current.add(fieldId)
       setHasUnsavedChanges(true)
 
       // Sync to agent state
@@ -536,7 +538,11 @@ export default function BriefWorkspacePage({
 
   // Handle sync brief to Nextcloud (lean workflow)
   const handleSyncBrief = useCallback(async () => {
-    const userEmail = tfUser?.email || ''
+    const changedFields = Array.from(modifiedFieldIds.current)
+    const changeSummary = changedFields.length > 0
+      ? `Updated ${changedFields.map(f => f.replace(/_/g, ' ')).join(', ')}`
+      : 'Brief updated'
+    const changedBy = tfUser?.name || tfUser?.email || 'unknown'
 
     try {
       const response = await fetch(`/api/projects/${id}`, {
@@ -544,8 +550,8 @@ export default function BriefWorkspacePage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'sync_brief',
-          change_summary: 'Manual sync from brief workspace',
-          changed_by: userEmail,
+          change_summary: changeSummary,
+          changed_by: changedBy,
         }),
       })
 
@@ -554,11 +560,12 @@ export default function BriefWorkspacePage({
         throw new Error(result.error || 'Failed to sync brief')
       }
 
+      modifiedFieldIds.current.clear()
       console.log('Brief synced to Nextcloud:', result)
     } catch (error) {
       console.error('Failed to sync brief:', error)
     }
-  }, [id])
+  }, [id, tfUser])
 
   // Handle Slack channel creation (deprecated - use handleSetupIntegrations)
   const handleCreateSlack = useCallback(async () => {

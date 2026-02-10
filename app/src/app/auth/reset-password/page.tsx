@@ -36,8 +36,11 @@ export default function ResetPasswordPage() {
         setError(error.message)
       } else {
         setSuccess(true)
-        setTimeout(() => router.push('/projects'), 2000)
+        // Use window.location for reliable redirect after auth state change
+        setTimeout(() => { window.location.href = '/projects' }, 2000)
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useCopilotChat, useCoAgent } from '@copilotkit/react-core'
 import { Role, TextMessage } from '@copilotkit/runtime-client-gql'
 import { useRouter } from 'next/navigation'
@@ -68,6 +68,17 @@ export default function NewProjectPage() {
       ...EMPTY_AGENT_STATE,
     },
   })
+
+  // Reset all state when starting a new project
+  // (CopilotKit persists agent state across navigations since the provider doesn't remount)
+  useEffect(() => {
+    setState({ ...EMPTY_AGENT_STATE })
+    setLocalFieldOverrides({})
+    setSavedProjectId(null)
+    lastSavedBriefRef.current = null
+    setTypeOverride(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Get extracted brief from agent state, merged with local overrides
   const extractedBrief = useMemo(() => {

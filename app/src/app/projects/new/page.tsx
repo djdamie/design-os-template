@@ -17,6 +17,7 @@ import {
   createClassificationReasoning,
   type FlatExtractedBrief,
 } from '@/lib/brief-to-canvas'
+import { calculateCompleteness } from '@/hooks/use-canvas-data'
 import { useTeamMembers } from '@/hooks/use-team-members'
 
 // LangGraph message format from AG-UI
@@ -273,6 +274,13 @@ export default function NewProjectPage() {
         })
       }
 
+      // Compute missing information from canvas fields
+      const briefFields = mapBriefToFields(extractedBrief as FlatExtractedBrief)
+      const completenessResult = calculateCompleteness(briefFields)
+      const missingInfo = completenessResult.missingFields.map(f =>
+        `${f.field} (${f.priority})`
+      )
+
       // Map the extracted brief to the API format
       const briefPayload = {
         // Business
@@ -311,6 +319,7 @@ export default function NewProjectPage() {
         kickoff_date: extractedBrief.kickoff_date,
         deadline_date: extractedBrief.deadline_date,
         first_presentation_date: extractedBrief.first_presentation_date,
+        client_presentation_date: extractedBrief.client_presentation_date,
         air_date: extractedBrief.air_date,
         deadline_urgency: extractedBrief.deadline_urgency,
         // Metadata
@@ -318,6 +327,7 @@ export default function NewProjectPage() {
         completeness: state?.completeness || 0,
         project_type: state?.project_type || 'C',
         extraction_notes: extractedBrief.extraction_notes,
+        missing_information: missingInfo.length > 0 ? missingInfo : null,
       }
 
       // Update the brief

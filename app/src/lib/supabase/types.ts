@@ -69,6 +69,7 @@ export interface TFBrief {
   // Timeline
   submission_deadline: string | null
   first_presentation_date: string | null
+  client_presentation_date: string | null
   ppm_date: string | null
   shoot_date: string | null
   offline_date: string | null

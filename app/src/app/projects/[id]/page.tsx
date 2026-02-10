@@ -4,7 +4,7 @@ import { use, useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useCoAgent, useCopilotChat, useCopilotReadable } from '@copilotkit/react-core'
 import { Role, TextMessage } from '@copilotkit/runtime-client-gql'
 import { BriefWorkspace } from '@/components/brief-workspace'
-import { useCanvasData, updateFieldValue, ExtractedBrief } from '@/hooks/use-canvas-data'
+import { useCanvasData, updateFieldValue, calculateCompleteness, ExtractedBrief } from '@/hooks/use-canvas-data'
 import { useTeamMembers } from '@/hooks/use-team-members'
 import { useAuth } from '@/components/providers/AuthProvider'
 import type { AllFields, ProjectType, TabId, CanvasField } from '@/components/project-canvas/types'
@@ -45,6 +45,7 @@ function transformSupabaseToBrief(data: TFProjectWithBrief): ExtractedBrief | nu
     language_adaptations: brief.language_adaptations || undefined,
     deadline_date: brief.submission_deadline || undefined,
     first_presentation_date: brief.first_presentation_date || undefined,
+    client_presentation_date: brief.client_presentation_date || undefined,
     air_date: brief.air_date || undefined,
     deadline_urgency: brief.deadline_urgency as ExtractedBrief['deadline_urgency'] || undefined,
   }
@@ -100,6 +101,7 @@ function transformFieldsToApiFormat(fields: AllFields): Record<string, unknown> 
     kickoff_date: getFieldValue(fields, 'WHEN', 'keyDates', 'kickoff_date'),
     submission_deadline: getFieldValue(fields, 'WHEN', 'keyDates', 'deadline_date'),
     first_presentation_date: getFieldValue(fields, 'WHEN', 'keyDates', 'first_presentation_date'),
+    client_presentation_date: getFieldValue(fields, 'WHEN', 'keyDates', 'client_presentation_date'),
     air_date: getFieldValue(fields, 'WHEN', 'keyDates', 'air_date'),
     deadline_urgency: getFieldValue(fields, 'WHEN', 'urgency', 'deadline_urgency'),
     // Context
@@ -469,6 +471,13 @@ export default function BriefWorkspacePage({
   const handleSave = useCallback(async () => {
     try {
       const briefData = transformFieldsToApiFormat(effectiveFields)
+
+      // Compute and include missing information
+      const completeness = calculateCompleteness(effectiveFields)
+      const missingInfo = completeness.missingFields.map(f =>
+        `${f.field} (${f.priority})`
+      )
+      briefData.missing_information = missingInfo.length > 0 ? missingInfo : null
 
       if (projectTypeOverride) {
         Object.assign(briefData, { project_type: projectTypeOverride })

@@ -65,6 +65,7 @@ export interface ExtractedBrief {
   // Timeline
   deadline_date?: string
   first_presentation_date?: string
+  client_presentation_date?: string
   air_date?: string
   deadline_urgency?: 'standard' | 'rush' | 'urgent'
   kickoff_date?: string
@@ -93,7 +94,7 @@ export interface CanvasData {
 }
 
 // Calculate completeness from fields
-function calculateCompleteness(fields: AllFields): CompletenessBreakdown {
+export function calculateCompleteness(fields: AllFields): CompletenessBreakdown {
   const criticalFields: string[] = []
   const importantFields: string[] = []
   const helpfulFields: string[] = []

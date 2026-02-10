@@ -194,6 +194,7 @@ export async function PUT(
       // Timeline - sanitize dates to prevent invalid timestamp errors
       submission_deadline: sanitizeDate(body.submission_deadline || body.deadline_date),
       first_presentation_date: sanitizeDate(body.first_presentation_date),
+      client_presentation_date: sanitizeDate(body.client_presentation_date),
       ppm_date: sanitizeDate(body.ppm_date),
       shoot_date: sanitizeDate(body.shoot_date),
       offline_date: sanitizeDate(body.offline_date),

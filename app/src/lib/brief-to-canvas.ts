@@ -57,6 +57,7 @@ export interface FlatExtractedBrief {
   air_date?: string
   deadline_urgency?: string
   first_presentation_date?: string
+  client_presentation_date?: string
   kickoff_date?: string
   // Context fields
   campaign_context?: string
@@ -302,7 +303,7 @@ export function mapBriefToFields(brief: FlatExtractedBrief | null): AllFields {
         fields: [
           { id: 'kickoff_date', label: 'Kick-off Date', value: b.kickoff_date || '', type: 'date', status: getFieldStatus(b.kickoff_date), priority: 'helpful', placeholder: 'Project start date' },
           { id: 'first_presentation_date', label: 'First Presentation', value: b.first_presentation_date || '', type: 'date', status: getFieldStatus(b.first_presentation_date), priority: 'important', placeholder: 'Internal first look' },
-          { id: 'client_presentation_date', label: 'Client Presentation', value: '', type: 'date', status: 'empty', priority: 'important', placeholder: 'Present to client' },
+          { id: 'client_presentation_date', label: 'Client Presentation', value: b.client_presentation_date || '', type: 'date', status: getFieldStatus(b.client_presentation_date), priority: 'important', placeholder: 'Present to client' },
           { id: 'deadline_date', label: 'Final Deadline', value: b.deadline_date || '', type: 'date', status: getFieldStatus(b.deadline_date), priority: 'critical', placeholder: 'Final approval needed' },
           { id: 'air_date', label: 'Air Date', value: b.air_date || '', type: 'date', status: getFieldStatus(b.air_date), priority: 'critical', placeholder: 'Campaign launch' },
         ],

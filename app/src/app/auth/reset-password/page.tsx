@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { Eye, EyeOff, ArrowRight } from 'lucide-react'
 
@@ -12,7 +11,17 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const router = useRouter()
+  const [hasSession, setHasSession] = useState<boolean | null>(null)
+
+  // Check for valid session on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setHasSession(!!session)
+      if (!session) {
+        setError('Your reset link has expired or is invalid. Please request a new one.')
+      }
+    })
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,12 +40,18 @@ export default function ResetPasswordPage() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.updateUser({ password })
-      if (error) {
-        setError(error.message)
+      // Add timeout to prevent infinite hang
+      const result = await Promise.race([
+        supabase.auth.updateUser({ password }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out. Please try again.')), 10000)
+        ),
+      ])
+
+      if (result.error) {
+        setError(result.error.message)
       } else {
         setSuccess(true)
-        // Use window.location for reliable redirect after auth state change
         setTimeout(() => { window.location.href = '/projects' }, 2000)
       }
     } catch (err) {
@@ -95,6 +110,22 @@ export default function ResetPasswordPage() {
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-[13px] text-emerald-400">
                   Password updated successfully. Redirecting...
                 </div>
+              </div>
+            ) : hasSession === false ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[13px] text-red-400">
+                  Your reset link has expired or is invalid. Please request a new one.
+                </div>
+                <a
+                  href="/login"
+                  className="flex w-full items-center justify-center text-sm text-sky-400 hover:text-sky-300 transition-colors"
+                >
+                  Back to Sign In
+                </a>
+              </div>
+            ) : hasSession === null ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-5 w-5 rounded-full border-2 border-zinc-600 border-t-sky-500 animate-spin" />
               </div>
             ) : (
               <>

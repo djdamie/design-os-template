@@ -73,11 +73,11 @@ export function ActionFooter({
                 <span>Integrations Ready</span>
               </div>
 
-              {/* Sync to Nextcloud button */}
+              {/* Update Brief in Nextcloud button */}
               <button
                 onClick={onSyncBrief}
                 disabled={isLoading}
-                aria-label="Sync Brief to Nextcloud"
+                aria-label="Update Brief in Nextcloud"
                 className={`
                   inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all
                   font-['DM_Sans']
@@ -91,12 +91,12 @@ export function ActionFooter({
                 {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Syncing...</span>
+                    <span>Updating...</span>
                   </>
                 ) : (
                   <>
                     <RefreshCw className="h-4 w-4" />
-                    <span>Sync to Nextcloud</span>
+                    <span>Update Brief in Nextcloud</span>
                   </>
                 )}
               </button>
@@ -104,7 +104,7 @@ export function ActionFooter({
               {/* Last synced timestamp */}
               {lastSynced && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-400 font-['DM_Sans']">
-                  Synced {formatLastSync(lastSynced)}
+                  Updated {formatLastSync(lastSynced)}
                 </span>
               )}
             </>

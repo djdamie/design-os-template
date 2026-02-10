@@ -302,7 +302,13 @@ export default function NewProjectPage() {
         video_lengths: extractedBrief.video_lengths,
         stems_required: extractedBrief.stems_required,
         sync_points: extractedBrief.sync_points,
+        // WITH_WHAT
+        source_type: extractedBrief.source_type,
+        deliverable_formats: extractedBrief.deliverable_formats,
+        file_formats: extractedBrief.file_formats,
+        language_adaptations: extractedBrief.language_adaptations,
         // Timeline
+        kickoff_date: extractedBrief.kickoff_date,
         deadline_date: extractedBrief.deadline_date,
         first_presentation_date: extractedBrief.first_presentation_date,
         air_date: extractedBrief.air_date,

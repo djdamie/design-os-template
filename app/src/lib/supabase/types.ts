@@ -58,6 +58,10 @@ export interface TFBrief {
   cutdowns: string[] | null
   stems_required: boolean
   sync_points: string | null
+  source_type: string | null
+  deliverable_formats: string[] | null
+  file_formats: string[] | null
+  language_adaptations: string[] | null
   // Context
   campaign_context: string | null
   target_audience: string | null

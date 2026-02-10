@@ -47,6 +47,11 @@ export interface FlatExtractedBrief {
   video_lengths?: string[]
   stems_required?: boolean
   sync_points?: string
+  // WITH_WHAT fields
+  source_type?: string
+  deliverable_formats?: string[]
+  file_formats?: string[]
+  language_adaptations?: string[]
   // Timeline fields
   deadline_date?: string
   air_date?: string
@@ -214,7 +219,7 @@ export function mapBriefToFields(brief: FlatExtractedBrief | null): AllFields {
         fields: [
           { id: 'project_title', label: 'Project Title', value: b.project_title || '', type: 'text', status: getFieldStatus(b.project_title), priority: 'critical', placeholder: 'Descriptive project name' },
           { id: 'video_lengths', label: 'Video Lengths', value: b.video_lengths || [], type: 'multi-select', options: ['6s', '10s', '15s', '20s', '30s', '45s', '60s', '90s', 'custom'], status: getFieldStatus(b.video_lengths), priority: 'important', placeholder: 'Select all needed lengths' },
-          { id: 'language_adaptations', label: 'Language Adaptations', value: [], type: 'multi-select', options: ['DE', 'EN', 'FR', 'ES', 'IT', 'PT', 'CN', 'JP', 'KR', 'AR'], status: 'empty', priority: 'helpful', placeholder: 'Select languages' },
+          { id: 'language_adaptations', label: 'Language Adaptations', value: b.language_adaptations || [], type: 'multi-select', options: ['DE', 'EN', 'FR', 'ES', 'IT', 'PT', 'CN', 'JP', 'KR', 'AR'], status: getFieldStatus(b.language_adaptations), priority: 'helpful', placeholder: 'Select languages' },
         ],
       },
       rightsUsage: {
@@ -270,15 +275,15 @@ export function mapBriefToFields(brief: FlatExtractedBrief | null): AllFields {
       musicSource: {
         label: 'Music Source',
         fields: [
-          { id: 'source_type', label: 'Source Type', value: '', type: 'select', options: ['Internal only', 'Request + playlist', 'Label/publisher briefing', 'Blanket license', 'Bespoke composition'], status: 'empty', priority: 'important', placeholder: 'How will music be sourced?' },
+          { id: 'source_type', label: 'Source Type', value: b.source_type || '', type: 'select', options: ['Internal only', 'Request + playlist', 'Label/publisher briefing', 'Blanket license', 'Bespoke composition'], status: getFieldStatus(b.source_type), priority: 'important', placeholder: 'How will music be sourced?' },
           { id: 'submission_rules', label: 'Submission Rules', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Any rules for submissions' },
         ],
       },
       deliverables: {
         label: 'Deliverables',
         fields: [
-          { id: 'deliverable_formats', label: 'Deliverable Format', value: [], type: 'multi-select', options: ['playlist link', 'shortlist file', 'comparison notes', 'demo', 'presentation deck'], status: 'empty', priority: 'important', placeholder: 'What format for delivery?' },
-          { id: 'file_formats', label: 'File Formats', value: [], type: 'multi-select', options: ['WAV', 'MP3', 'AIFF', 'stems'], status: 'empty', priority: 'helpful', placeholder: 'Required audio formats' },
+          { id: 'deliverable_formats', label: 'Deliverable Format', value: b.deliverable_formats || [], type: 'multi-select', options: ['playlist link', 'shortlist file', 'comparison notes', 'demo', 'presentation deck'], status: getFieldStatus(b.deliverable_formats), priority: 'important', placeholder: 'What format for delivery?' },
+          { id: 'file_formats', label: 'File Formats', value: b.file_formats || [], type: 'multi-select', options: ['WAV', 'MP3', 'AIFF', 'stems'], status: getFieldStatus(b.file_formats), priority: 'helpful', placeholder: 'Required audio formats' },
           { id: 'stems_required', label: 'Stems Required', value: b.stems_required || false, type: 'boolean', status: getFieldStatus(b.stems_required), priority: 'important' },
           { id: 'stems_details', label: 'Stems Details', value: '', type: 'textarea', status: 'empty', priority: 'helpful', placeholder: 'Specify stem requirements', dependsOn: { field: 'stems_required', value: true } },
         ],

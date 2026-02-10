@@ -183,6 +183,10 @@ export async function PUT(
       cutdowns: body.cutdowns,
       stems_required: body.stems_required,
       sync_points: body.sync_points,
+      source_type: body.source_type,
+      deliverable_formats: body.deliverable_formats,
+      file_formats: body.file_formats,
+      language_adaptations: body.language_adaptations,
       // Context
       campaign_context: body.campaign_context,
       target_audience: body.target_audience,
